@@ -15,7 +15,7 @@ CFG="${COACH_COVERS_CONFIG:-$HOME/.coach-covers/config.env}"
 . "$CFG"
 : "${SUPABASE_URL:?missing in config}" "${SUPABASE_ANON_KEY:?missing}" "${ADMIN_TOKEN:?missing}"
 
-TSV="${1:-$HOME/arbox-shifts/my-shifts.tsv}"
+TSV="${1:-$HOME/arbox-shifts/all-boxes.tsv}"
 [ -f "$TSV" ] || { echo "no such file: $TSV" >&2; exit 1; }
 command -v python3 >/dev/null || { echo "python3 required" >&2; exit 1; }
 
@@ -30,8 +30,11 @@ with io.open(sys.argv[1], encoding='utf-8') as f:
         p=line.split('\t')
         if len(p) < 5: continue
         d,t,box,cls,coach = p[0],p[1][:5],p[2],p[3],p[4]
-        rows.append({"key": "%s|%s|%s" % (d, t, box.strip().lower()),
-                     "date": d, "time": t, "box": box, "klass": cls, "coach": coach})
+        # unique key: real Arbox class id when present (col 6), else synthesised.
+        # keying by id, not time+box, is what lets two parallel classes coexist.
+        key = p[5].strip() if len(p) >= 6 and p[5].strip() else \
+              ("%s|%s|%s|%s" % (d, t, box.strip().lower(), cls.strip().lower()))
+        rows.append({"key": key, "date": d, "time": t, "box": box, "klass": cls, "coach": coach})
 print(json.dumps({"p_admin": sys.argv[2], "p_shifts": rows}))
 PY
 )" || exit 1
