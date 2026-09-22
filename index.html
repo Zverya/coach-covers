@@ -113,6 +113,29 @@ select,input[type=text]{font:inherit;font-size:15px;color:var(--ink);background:
   font-family:inherit;display:block}
 .wk-ev b{display:block;font-weight:600;font-variant-numeric:tabular-nums}
 .wk-ev.asked{opacity:.5;text-decoration:line-through}
+.wk-ev.st-await{background:var(--warn)}
+.wk-ev.st-handed{opacity:.42;text-decoration:line-through}
+.wk-ev.st-take{background:var(--ok-bg);color:var(--ok);border:1.5px dashed var(--ok);padding:1px 3px}
+.wk-ev.st-covering{background:var(--ok)}
+.wk-ev .mk{font-weight:600}
+.wk-row.st-await i{background:var(--warn)}
+.wk-row.st-handed{opacity:.55}
+.wk-row.st-take i{background:var(--ok)}
+.wk-row.st-covering i{background:var(--ok)}
+.wk-row{display:flex;gap:8px;align-items:center;padding:7px 9px;background:var(--surface);
+  border:1px solid var(--line);border-radius:8px;margin-bottom:4px;width:100%;text-align:left}
+.wk-row i{width:8px;height:8px;border-radius:2px;flex:none}
+.wk-row .t{font-family:"IBM Plex Mono",monospace;font-size:12.5px;font-weight:500;
+  font-variant-numeric:tabular-nums;flex:none;color:var(--ink)}
+.wk-row .n{font-size:12.5px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wk-row .tag{margin-left:auto;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;
+  font-weight:600;padding:2px 6px;border-radius:999px;white-space:nowrap;flex:none}
+.tag.teach{background:var(--surface-2);color:var(--ink-2)}
+.tag.await{background:var(--warn-bg);color:var(--warn)}
+.tag.handed{background:var(--ok-bg);color:var(--ok)}
+.tag.take{background:var(--ok-bg);color:var(--ok)}
+.tag.covering{background:var(--ok-bg);color:var(--ok)}
+button.wk-row{cursor:pointer;font-family:inherit}
 .wk-list{display:none}
 .wk-day{margin-bottom:13px}
 .wk-day h4{font-family:Oswald,sans-serif;font-weight:500;font-size:12px;text-transform:uppercase;
@@ -252,30 +275,95 @@ function renderSchedule(app,d){
   var days=[]; for(var i=0;i<7;i++){ var x=new Date(ws.getTime()); x.setDate(x.getDate()+i); days.push(iso(x)); }
 
   var reqByKey={}; (d.requests||[]).forEach(function(r){ reqByKey[r.key]=r; });
-  var mineAll=(d.shifts||[]).filter(function(s){ return s.coach===ME; });
-  var inWeek=mineAll.filter(function(s){ return days.indexOf(s.date)>=0; });
+
+  // --- the four layers, per day ---
+  function eventsOn(ds){
+    var evs=[];
+    var mine=(d.shifts||[]).filter(function(s){ return s.coach===ME && s.date===ds; });
+    var myTimes=mine.map(function(s){ return hm(s.time); });
+    // 1. my own classes (with awaiting / handed-over states)
+    mine.forEach(function(s){
+      var r=reqByKey[s.key];
+      var st = !r ? "teach"
+             : (r.status==="open"||r.status==="claimed"||r.status==="rejected") ? "await"
+             : (r.status==="approved"||r.status==="verified") ? "handed" : "teach";
+      evs.push({t:mins(s.time), time:s.time, box:s.box, label:(s.klass||shortBox(s.box)),
+                kind:"mine", st:st, s:s, r:r});
+    });
+    // 2. shifts I am free to take, across all boxes (open, not mine, no clash)
+    (d.requests||[]).forEach(function(r){
+      if(r.date!==ds || r.status!=="open") return;
+      if(r.originalCoach===ME || r.createdBy===ME || r.claimedBy===ME) return;
+      if(myTimes.indexOf(hm(r.time))>=0) return; // I'm teaching then
+      evs.push({t:mins(r.time), time:r.time, box:r.box, label:(r.klass||shortBox(r.box)),
+                kind:"take", st:"take", r:r});
+    });
+    // 3+4. shifts I am covering for others (claimed / confirmed)
+    (d.requests||[]).forEach(function(r){
+      if(r.date!==ds || r.claimedBy!==ME) return;
+      evs.push({t:mins(r.time), time:r.time, box:r.box, label:(r.klass||shortBox(r.box)),
+                kind:"cover", st:"covering", r:r});
+    });
+    return evs.sort(function(a,b){ return a.t-b.t; });
+  }
+  function tagText(e){
+    if(e.kind==="take") return "free";
+    if(e.kind==="cover") return e.r.status==="verified" ? "covering" : (e.r.status==="approved" ? "covering" : "covering");
+    if(e.st==="await") return e.r && e.r.claimedBy ? "cover taken" : "needs cover";
+    if(e.st==="handed") return "covered";
+    return "yours";
+  }
+  function tagClass(e){
+    if(e.kind==="take") return "take";
+    if(e.kind==="cover") return "covering";
+    if(e.st==="await") return "await";
+    if(e.st==="handed") return "handed";
+    return "teach";
+  }
+  function act(e){
+    if(e.kind==="take"){ doClaim(e.r); return; }
+    if(e.kind==="cover"){
+      if(e.r.status==="claimed") doRelease(e.r);
+      else toast(e.r.status==="verified" ? "Confirmed in Arbox." : "You're covering this \u2014 approved.");
+      return;
+    }
+    if(e.st==="await"){ toast(e.r && e.r.claimedBy ? (e.r.claimedBy+" is taking it \u2014 awaiting approval") : "On the board \u2014 nobody has taken it yet"); return; }
+    if(e.st==="handed"){ toast((e.r&&e.r.claimedBy?e.r.claimedBy:"Someone")+" is covering"+(e.r&&e.r.status==="verified"?", confirmed in Arbox":"")); return; }
+    doRaise(e.s); // my class, not yet on the board
+  }
+
+  var weekEvents={}; var nMine=0,nTake=0,nAwait=0,nCover=0;
+  days.forEach(function(ds){
+    var evs=eventsOn(ds); weekEvents[ds]=evs;
+    evs.forEach(function(e){
+      if(e.kind==="take") nTake++;
+      else if(e.kind==="cover") nCover++;
+      else if(e.st==="await") nAwait++;
+      else if(e.st==="teach") nMine++;
+    });
+  });
 
   var months=["January","February","March","April","May","June","July","August","September","October","November","December"];
   var we=new Date(ws.getTime()); we.setDate(we.getDate()+6);
   var h=el("div","cal-head");
-  h.appendChild(el("h2","cal-title",pad(ws.getDate())+"–"+pad(we.getDate())+" "+months[we.getMonth()]));
-  function nav(lbl,fn){ var b=el("button","btn",lbl); b.type="button";
-    b.addEventListener("click",fn); h.appendChild(b); }
-  nav("←",function(){ var w=new Date(S.weekStart+"T00:00:00"); w.setDate(w.getDate()-7);
-    S.weekStart=iso(w); render(); });
+  h.appendChild(el("h2","cal-title",pad(ws.getDate())+"\u2013"+pad(we.getDate())+" "+months[we.getMonth()]));
+  function nav(lbl,fn){ var b=el("button","btn",lbl); b.type="button"; b.addEventListener("click",fn); h.appendChild(b); }
+  nav("\u2190",function(){ var w=new Date(S.weekStart+"T00:00:00"); w.setDate(w.getDate()-7); S.weekStart=iso(w); render(); });
   nav("Today",function(){ S.weekStart=iso(sundayOf(new Date())); render(); });
-  nav("→",function(){ var w=new Date(S.weekStart+"T00:00:00"); w.setDate(w.getDate()+7);
-    S.weekStart=iso(w); render(); });
-  var sum=el("p","cal-sum", inWeek.length
-    ? inWeek.length+" "+(inWeek.length===1?"class":"classes")+" for you this week"
-    : "Nothing for you this week.");
-  h.appendChild(sum);
+  nav("\u2192",function(){ var w=new Date(S.weekStart+"T00:00:00"); w.setDate(w.getDate()+7); S.weekStart=iso(w); render(); });
+  var bits=[];
+  bits.push(nMine+" yours");
+  if(nAwait) bits.push(nAwait+" awaiting cover");
+  if(nTake) bits.push(nTake+" you can pick up");
+  if(nCover) bits.push(nCover+" you're covering");
+  h.appendChild(el("p","cal-sum", bits.join(" \u00b7 ")));
   app.appendChild(h);
 
+  // hour bounds from all events shown
+  var allT=[]; days.forEach(function(ds){ weekEvents[ds].forEach(function(e){ allT.push(e.t); }); });
   var minH=6,maxH=21;
-  if(inWeek.length){ var ms=inWeek.map(function(x){return mins(x.time);});
-    minH=Math.max(0,Math.floor(Math.min.apply(null,ms)/60)-1);
-    maxH=Math.min(24,Math.ceil(Math.max.apply(null,ms)/60)+2);
+  if(allT.length){ minH=Math.max(0,Math.floor(Math.min.apply(null,allT)/60)-1);
+    maxH=Math.min(24,Math.ceil(Math.max.apply(null,allT)/60)+2);
     if(maxH-minH<6) maxH=Math.min(24,minH+6); }
   var ROW=34,PAD=9,H=(maxH-minH)*ROW+PAD*2;
   var dow=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
@@ -295,65 +383,63 @@ function renderSchedule(app,d){
 
   days.forEach(function(ds){
     var col=el("div","wk-col"); col.style.height=H+"px";
-    for(var hh=minH+1;hh<maxH;hh++){ var ln=el("div","wk-line");
-      ln.style.top=(PAD+(hh-minH)*ROW)+"px"; col.appendChild(ln); }
-    inWeek.filter(function(s){ return s.date===ds; })
-      .sort(function(a,b){ return mins(a.time)-mins(b.time); })
-      .forEach(function(s){
-        var r=reqByKey[s.key];
-        var ev=el("button","wk-ev"+(r?" asked":"")); ev.type="button";
-        ev.style.background=boxColor(s.box);
-        ev.style.top=(PAD+((mins(s.time)-minH*60)/60)*ROW)+"px";
+    for(var hh=minH+1;hh<maxH;hh++){ var ln=el("div","wk-line"); ln.style.top=(PAD+(hh-minH)*ROW)+"px"; col.appendChild(ln); }
+    // side-by-side within the same start minute
+    var buckets={}; weekEvents[ds].forEach(function(e){ (buckets[e.t]=buckets[e.t]||[]).push(e); });
+    Object.keys(buckets).forEach(function(tk){
+      var group=buckets[tk]; var w=100/group.length;
+      group.forEach(function(e,idx){
+        var ev=el("button","wk-ev st-"+tagClass(e)); ev.type="button";
+        if(e.kind==="mine"||e.kind==="cover") ev.style.background=e.kind==="cover"?"var(--ok)":boxColor(e.box);
+        if(e.st==="await") ev.style.background="var(--warn)";
+        if(e.kind==="take"){ ev.style.background="var(--ok-bg)"; }
+        ev.style.left="calc("+(idx*w)+"% + 2px)";
+        ev.style.width="calc("+w+"% - 4px)"; ev.style.right="auto";
+        ev.style.top=(PAD+((e.t-minH*60)/60)*ROW)+"px";
         ev.style.height=(ROW-3)+"px";
-        ev.appendChild(el("b",null,hm(s.time)));
-        ev.appendChild(el("span",null,s.klass||shortBox(s.box)));
-        ev.title=hm(s.time)+" "+(s.klass||"")+" — "+s.box;
-        ev.addEventListener("click",function(){ if(!r) doRaise(s); else toast("Already on the board."); });
+        ev.appendChild(el("b",null,hm(e.time)));
+        ev.appendChild(el("span",null,e.label));
+        ev.title=hm(e.time)+" "+e.label+" \u2014 "+e.box+"  ("+tagText(e)+")";
+        (function(ee){ ev.addEventListener("click",function(){ act(ee); }); })(e);
         col.appendChild(ev);
       });
+    });
     g.appendChild(col);
   });
   app.appendChild(g);
 
+  // stacked list (phones)
   var L=el("div","wk-list");
   days.forEach(function(ds,i){
-    var list=inWeek.filter(function(s){ return s.date===ds; })
-      .sort(function(a,b){ return mins(a.time)-mins(b.time); });
+    var evs=weekEvents[ds];
     var wrap=el("div","wk-day"+(ds===iso(today)?" today":""));
     var dd=new Date(ds+"T00:00:00");
     wrap.appendChild(el("h4",null,dow[i]+" "+pad(dd.getDate())+"/"+pad(dd.getMonth()+1)));
-    if(!list.length) wrap.appendChild(el("div","wk-none","—"));
-    list.forEach(function(s){
-      var r=reqByKey[s.key];
-      var c=el("div","card"+(r?" waiting":""));
-      var top=el("div","top");
-      top.appendChild(el("span","when",hm(s.time)));
-      top.appendChild(el("span","box",shortBox(s.box)));
-      if(r) top.appendChild(el("span","pill waiting", r.claimedBy?("Covered by "+r.claimedBy):"Asking"));
-      c.appendChild(top);
-      c.appendChild(el("div","sub",s.klass||"class"));
-      if(!r){
-        var a=el("div","acts");
-        var b=el("button","btn",S.busy===s.key?"…":"I need cover for this");
-        b.disabled=S.busy===s.key;
-        b.addEventListener("click",function(){ doRaise(s); });
-        a.appendChild(b); c.appendChild(a);
-      }
-      wrap.appendChild(c);
+    if(!evs.length) wrap.appendChild(el("div","wk-none","\u2014"));
+    evs.forEach(function(e){
+      var row=el("button","wk-row st-"+tagClass(e)); row.type="button";
+      var sw=el("i"); sw.style.background = e.kind==="take"||e.kind==="cover" ? "var(--ok)" : (e.st==="await"?"var(--warn)":boxColor(e.box));
+      row.appendChild(sw);
+      row.appendChild(el("span","t",hm(e.time)));
+      row.appendChild(el("span","n", e.label+" \u00b7 "+shortBox(e.box)));
+      row.appendChild(el("span","tag "+tagClass(e), tagText(e)));
+      (function(ee){ row.addEventListener("click",function(){ act(ee); }); })(e);
+      wrap.appendChild(row);
     });
     L.appendChild(wrap);
   });
   app.appendChild(L);
 
+  // legend of the layers
   var lg=el("div","legend");
-  boxes().forEach(function(b){
-    var n=inWeek.filter(function(x){ return (x.box||"").trim()===b; }).length;
-    var k=el("div","key"); var sw=el("i"); sw.style.background=boxColor(b);
-    k.appendChild(sw); k.appendChild(el("span",null,shortBox(b)+(n?" · "+n:"")));
-    lg.appendChild(k);
-  });
+  function key(color,label){ var k=el("div","key"); var sw=el("i"); sw.style.background=color; k.appendChild(sw); k.appendChild(el("span",null,label)); lg.appendChild(k); }
+  key("var(--c0)","Your class");
+  key("var(--warn)","Awaiting cover");
+  key("var(--ok)","You're covering");
+  var tk=el("div","key"); var ti=el("i"); ti.style.background="var(--ok-bg)"; ti.style.border="1.5px dashed var(--ok)"; tk.appendChild(ti); tk.appendChild(el("span",null,"Free to pick up")); lg.appendChild(tk);
   app.appendChild(lg);
-  app.appendChild(el("p","foot","Tap any class to ask for cover. It goes on the board straight away and the other coaches can see it."));
+
+  app.appendChild(el("p","foot","Tap your class to ask for cover. Tap a green dashed slot to pick up a shift someone needs covered. It only counts once an approver signs it off and Arbox is updated."));
 }
 
 /* -------------------------------------------------------------- covers */
