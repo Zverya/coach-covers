@@ -207,8 +207,32 @@ function load(){
     S.loading=false;
     if(!res||res.ok===false){ S.err=(res&&res.error)||"unknown"; }
     else { S.err=null; S.data=res; }
-    render();
-  }).catch(function(){ S.loading=false; S.err="network"; render(); });
+    return syncExtras();
+  }).then(function(){ render(); })
+  .catch(function(){ S.loading=false; S.err="network"; render(); });
+}
+function syncExtras(){
+  var jobs=[];
+  // pull this coach's saved boxes from the DB (source of truth across devices)
+  if(ME && !S.boxesSynced){
+    S.boxesSynced=true;
+    jobs.push(rpc("get_coach_boxes",{p_token:TOKEN,p_coach:ME}).then(function(r){
+      if(r&&r.ok&&Array.isArray(r.boxes)&&r.boxes.length){
+        MYBOXES=r.boxes; try{ localStorage.setItem("coach-boxes",JSON.stringify(MYBOXES)); }catch(e){}
+      }
+    }).catch(function(){}));
+  }
+  // approver: pending box requests
+  if(S.data && S.data.role==="admin"){
+    jobs.push(rpc("pending_boxes",{p_token:TOKEN}).then(function(r){
+      S.boxReqs = (r&&r.ok&&r.boxes)?r.boxes:[];
+    }).catch(function(){ S.boxReqs=[]; }));
+  }
+  return Promise.all(jobs);
+}
+function saveBoxes(){
+  try{ localStorage.setItem("coach-boxes",JSON.stringify(MYBOXES)); }catch(e){}
+  if(ME) rpc("set_coach_boxes",{p_token:TOKEN,p_coach:ME,p_boxes:MYBOXES}).catch(function(){});
 }
 
 /* ---------------------------------------------------------------- render */
@@ -302,7 +326,8 @@ function pickName(app,d){
     ME=sel.value;
     var wrap=boxHost.querySelector(".boxpick");
     MYBOXES = wrap ? checkedBoxes(wrap) : [];
-    try{ localStorage.setItem("coach-name",ME); localStorage.setItem("coach-boxes",JSON.stringify(MYBOXES)); }catch(e){}
+    try{ localStorage.setItem("coach-name",ME); }catch(e){}
+    S.boxesSynced=true; saveBoxes();
     render();
   });
   g.appendChild(go); app.appendChild(g);
@@ -314,13 +339,37 @@ function boxEditor(app,d){
   var wrap=boxCheckboxes(d, MYBOXES); g.appendChild(wrap);
   var go=el("button","btn primary","Save"); go.style.marginTop="12px";
   go.addEventListener("click",function(){
-    MYBOXES=checkedBoxes(wrap);
-    try{ localStorage.setItem("coach-boxes",JSON.stringify(MYBOXES)); }catch(e){}
+    MYBOXES=checkedBoxes(wrap); saveBoxes();
     S.editBoxes=false; render();
   });
   var back=el("button","btn ghost","Cancel"); back.style.marginTop="12px"; back.style.marginLeft="6px";
   back.addEventListener("click",function(){ S.editBoxes=false; render(); });
-  g.appendChild(go); g.appendChild(back); app.appendChild(g);
+  g.appendChild(go); g.appendChild(back);
+
+  // --- coach somewhere the board doesn't cover yet ---
+  var addWrap=el("div"); addWrap.style.marginTop="22px"; addWrap.style.textAlign="left";
+  var toggle=el("button","btn ghost","+ Coach at another gym? Add it"); toggle.type="button";
+  var form=el("div"); form.hidden=true; form.style.marginTop="10px";
+  form.appendChild(el("div","boxlabel","Gym name"));
+  var nm=el("input"); nm.type="text"; nm.placeholder="e.g. CrossFit Netanya"; form.appendChild(nm);
+  var lbl=el("div","boxlabel"); lbl.textContent="Its public schedule link"; lbl.style.marginTop="10px"; form.appendChild(lbl);
+  var lk=el("input"); lk.type="text"; lk.placeholder="the gym's booking / schedule page link"; form.appendChild(lk);
+  form.appendChild(el("p","foot","The approver adds it in, then it appears here for everyone. Your classes there become swappable too."));
+  var send=el("button","btn primary","Send to the approver"); send.type="button"; send.style.marginTop="6px";
+  send.addEventListener("click",function(){
+    if(!nm.value.trim()){ toast("Type the gym's name"); return; }
+    send.disabled=true;
+    rpc("submit_box",{p_token:TOKEN,p_coach:ME,p_name:nm.value.trim(),p_link:lk.value.trim()}).then(function(r){
+      send.disabled=false;
+      if(r&&r.ok){ toast("Sent. The approver will add it."); nm.value=""; lk.value=""; form.hidden=true; }
+      else toast("Couldn't send \u2014 try again.");
+    }).catch(function(){ send.disabled=false; toast("Couldn't reach the board."); });
+  });
+  form.appendChild(send);
+  toggle.addEventListener("click",function(){ form.hidden=!form.hidden; if(!form.hidden) nm.focus(); });
+  addWrap.appendChild(toggle); addWrap.appendChild(form);
+  g.appendChild(addWrap);
+  app.appendChild(g);
 }
 
 /* ------------------------------------------------------------- my week */
@@ -584,6 +633,29 @@ function renderCovers(app,d){
 /* ----------------------------------------------------------- approvals */
 function renderApprovals(app,d){
   var reqs=d.requests||[];
+  // pending box requests from coaches
+  var boxReqs=S.boxReqs||[];
+  if(boxReqs.length){
+    app.appendChild(el("h2",null,"New boxes requested ("+boxReqs.length+")"));
+    var bl=el("div","list");
+    boxReqs.forEach(function(bq){
+      var c=el("div","card waiting");
+      var top=el("div","top");
+      top.appendChild(el("span","box", bq.gym));
+      top.appendChild(el("span","pill waiting", bq.by||"a coach"));
+      c.appendChild(top);
+      if(bq.link){ var ln=el("div","sub"); ln.style.wordBreak="break-all"; ln.textContent=bq.link; c.appendChild(ln); }
+      c.appendChild(el("div","sub","Pull it in with:  ./add-box.sh \""+bq.gym+"\" \""+(bq.link||"LINK")+"\""));
+      var a=el("div","acts");
+      var addb=el("button","btn primary","Mark added"); addb.type="button";
+      addb.addEventListener("click",function(){ resolveBox(bq.id,"added"); });
+      var dec=el("button","btn","Decline"); dec.type="button";
+      dec.addEventListener("click",function(){ resolveBox(bq.id,"declined"); });
+      a.appendChild(addb); a.appendChild(dec); c.appendChild(a);
+      bl.appendChild(c);
+    });
+    app.appendChild(bl);
+  }
   var waiting=reqs.filter(function(r){ return r.status==="claimed"; });
   var approved=reqs.filter(function(r){ return r.status==="approved"; });
   var open=reqs.filter(function(r){ return r.status==="open"; });
@@ -719,6 +791,13 @@ function doRaise(s){
     S.busy=null; toast(res&&res.ok?"Asked. The others can see it now.":"Already on the board.");
     return load();
   }).catch(function(){ S.busy=null; toast("Couldn't reach the board."); render(); });
+}
+function resolveBox(id,status){
+  rpc("resolve_box",{p_token:TOKEN,p_id:id,p_status:status}).then(function(r){
+    toast(status==="added"?"Marked added.":"Declined.");
+    S.boxReqs=(S.boxReqs||[]).filter(function(b){ return b.id!==id; });
+    render();
+  }).catch(function(){ toast("Couldn't reach the board."); });
 }
 function doDecide(r,approve){
   var note="";
