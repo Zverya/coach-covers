@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Coach Covers</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#F5F6FA; --surface:#FFF; --surface-2:#EFF1F7; --line:#DFE3ED;
+  --ink:#171A24; --ink-2:#545B71; --ink-3:#858BA0;
+  --accent:#2A3F9D; --accent-ink:#FFF; --accent-soft:#E7EAF7;
+  --crit:#C0392B; --crit-bg:#FBEBE7; --warn:#9A6206; --warn-bg:#FAF0DC;
+  --ok:#14713C; --ok-bg:#E3F2E8;
+  --shadow:0 1px 2px rgba(23,26,36,.06);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#101219; --surface:#191C26; --surface-2:#212530; --line:#2C313F;
+  --ink:#E9EBF3; --ink-2:#A2A9BF; --ink-3:#757D94;
+  --accent:#8A9BF0; --accent-ink:#11131B; --accent-soft:#222840;
+  --crit:#F08A72; --crit-bg:#2E1E1A; --warn:#E0B255; --warn-bg:#2C2417;
+  --ok:#6BC98C; --ok-bg:#16281D; --shadow:0 1px 2px rgba(0,0,0,.4);
+}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg); color:var(--ink); font-size:15px; line-height:1.5;
+  font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  padding:env(safe-area-inset-top,0) 0 calc(28px + env(safe-area-inset-bottom,0))}
+.wrap{max-width:620px; margin:0 auto; padding-inline:16px}
+header{padding-block:20px 12px; display:flex; align-items:baseline; gap:10px; flex-wrap:wrap}
+h1{font-family:Oswald,sans-serif; font-weight:600; font-size:23px; text-transform:uppercase;
+  letter-spacing:.02em; margin:0; line-height:1.1}
+.who{margin-left:auto; font-size:12px; color:var(--ink-2)}
+.who button{appearance:none;border:0;background:none;color:var(--accent);font:inherit;
+  font-size:12px;cursor:pointer;text-decoration:underline;padding:0}
+h2{font-family:Oswald,sans-serif; font-weight:500; font-size:13.5px; text-transform:uppercase;
+  letter-spacing:.05em; margin:26px 0 9px; color:var(--ink-2)}
+h2:first-of-type{margin-top:16px}
+.list{display:flex; flex-direction:column; gap:8px}
+.card{background:var(--surface); border:1px solid var(--line); border-radius:10px;
+  box-shadow:var(--shadow); padding:11px 13px 11px 15px; position:relative; overflow:hidden}
+.card::before{content:""; position:absolute; inset:0 auto 0 0; width:4px; background:var(--ink-3)}
+.card.open::before{background:var(--crit)}
+.card.mine::before{background:var(--ok)}
+.card.waiting::before{background:var(--warn)}
+.top{display:flex; align-items:baseline; gap:9px; flex-wrap:wrap}
+.when{font-family:"IBM Plex Mono",monospace; font-size:13.5px; font-weight:500;
+  font-variant-numeric:tabular-nums; white-space:nowrap}
+.box{font-size:13px; color:var(--ink-2); font-weight:500}
+.pill{font-size:10px; text-transform:uppercase; letter-spacing:.06em; font-weight:600;
+  padding:3px 7px; border-radius:999px; margin-left:auto; white-space:nowrap}
+.pill.open{background:var(--crit-bg); color:var(--crit)}
+.pill.mine{background:var(--ok-bg); color:var(--ok)}
+.pill.waiting{background:var(--warn-bg); color:var(--warn)}
+.sub{font-size:13px; color:var(--ink-2); margin-top:5px}
+.sub b{color:var(--ink); font-weight:500}
+.soon{color:var(--crit); font-weight:600}
+.acts{display:flex; gap:6px; flex-wrap:wrap; margin-top:10px}
+button.btn{appearance:none; cursor:pointer; font-family:inherit; font-size:12.5px; font-weight:500;
+  padding:8px 13px; border-radius:7px; border:1px solid var(--line);
+  background:var(--surface-2); color:var(--ink)}
+button.btn.primary{background:var(--accent); color:var(--accent-ink); border-color:transparent; font-weight:600}
+button.btn:disabled{opacity:.5; cursor:not-allowed}
+button.btn:focus-visible{outline:2px solid var(--accent); outline-offset:1px}
+.empty{border:1px dashed var(--line); border-radius:10px; padding:20px 16px; text-align:center;
+  color:var(--ink-2); font-size:13.5px; background:var(--surface)}
+.note{background:var(--surface-2); border:1px solid var(--line); border-radius:10px;
+  padding:11px 13px; font-size:13px; color:var(--ink-2); margin-bottom:14px}
+.note.bad{background:var(--crit-bg); border-color:transparent; color:var(--crit)}
+select,input[type=text]{font:inherit; font-size:15px; color:var(--ink); background:var(--surface);
+  border:1px solid var(--line); border-radius:8px; padding:10px; width:100%}
+.gate{max-width:380px; margin:64px auto; text-align:center}
+.gate h1{margin-bottom:8px}
+.gate p{color:var(--ink-2); font-size:13.5px; margin:0 0 18px}
+.toast{position:fixed; left:50%; transform:translateX(-50%);
+  bottom:calc(18px + env(safe-area-inset-bottom,0)); background:var(--ink); color:var(--bg);
+  font-size:13px; font-weight:500; padding:10px 16px; border-radius:999px; z-index:50;
+  box-shadow:0 4px 14px rgba(0,0,0,.2); max-width:90vw; text-align:center}
+.foot{color:var(--ink-3); font-size:11.5px; margin-top:26px; line-height:1.5}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<script>
+/* ------------------------------------------------------------------ config
+   Filled in after the Supabase project exists. The anon key is meant to be
+   public: every table has row-level security on with no policies, so this key
+   can only call the functions in schema.sql, and each one checks the token. */
+var CONFIG = {
+  url: "__SUPABASE_URL__",
+  key: "__SUPABASE_ANON_KEY__"
+};
+
+var TOKEN = (location.hash.match(/t=([A-Za-z0-9_-]+)/) || [])[1] || "";
+var ME = null;
+try { ME = localStorage.getItem("coach-name"); } catch (e) {}
+
+var S = { loading: true, err: null, data: null, busy: null };
+
+function $(sel, root){ return (root || document).querySelector(sel); }
+function el(tag, cls, txt){ var n = document.createElement(tag); if (cls) n.className = cls;
+  if (txt != null) n.textContent = txt; return n; }
+function pad(n){ return (n < 10 ? "0" : "") + n; }
+
+function rpc(fn, args){
+  return fetch(CONFIG.url + "/rest/v1/rpc/" + fn, {
+    method: "POST",
+    headers: { "apikey": CONFIG.key, "Authorization": "Bearer " + CONFIG.key,
+               "Content-Type": "application/json" },
+    body: JSON.stringify(args)
+  }).then(function(r){
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  });
+}
+function toast(msg){
+  var old = document.querySelector(".toast"); if (old) old.remove();
+  var t = el("div", "toast", msg); document.body.appendChild(t);
+  setTimeout(function(){ if (t.parentNode) t.remove(); }, 2800);
+}
+function when(r){
+  var d = new Date(r.date + "T00:00:00");
+  var days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  if (isNaN(d.getTime())) return r.date + " " + r.time;
+  return days[d.getDay()] + " " + pad(d.getDate()) + "/" + pad(d.getMonth() + 1)
+         + "  " + String(r.time).slice(0, 5);
+}
+function hoursUntil(r){
+  var d = new Date(r.date + "T" + String(r.time).slice(0,5) + ":00");
+  return isNaN(d.getTime()) ? Infinity : (d.getTime() - Date.now()) / 3600000;
+}
+function shortBox(n){ return String(n || "").replace(/^\s*crossfit\s+/i, "").trim() || String(n || ""); }
+
+function load(){
+  return rpc("board_state", { p_token: TOKEN }).then(function(res){
+    S.loading = false;
+    if (!res || res.ok === false) { S.err = (res && res.error) || "unknown"; }
+    else { S.err = null; S.data = res; }
+    render();
+  }).catch(function(e){
+    S.loading = false; S.err = "network"; render();
+  });
+}
+
+/* ------------------------------------------------------------------ render */
+function render(){
+  var app = $("#app"); app.innerHTML = "";
+
+  if (!TOKEN)          return gate(app, "This link is missing its code", "Ask whoever sent it for the full link — it should end in #t= followed by a code.");
+  if (S.loading)       return gate(app, "Loading…", "");
+  if (S.err === "network")       return gate(app, "Can't reach the board", "Check your connection and pull to refresh.");
+  if (S.err === "unknown_board") return gate(app, "This link doesn't work", "The code isn't recognised. Ask for a fresh link.");
+  if (S.err)           return gate(app, "Something went wrong", "Try again in a moment.");
+
+  var d = S.data;
+  if (!ME) return pickName(app, d);
+
+  var head = el("header");
+  head.appendChild(el("h1", null, d.board && d.board.name ? d.board.name : "Coach Covers"));
+  var who = el("div", "who");
+  who.appendChild(document.createTextNode(ME + " · "));
+  var sw = el("button", null, "not you?");
+  sw.addEventListener("click", function(){ ME = null; try { localStorage.removeItem("coach-name"); } catch(e){} render(); });
+  who.appendChild(sw);
+  head.appendChild(who);
+  app.appendChild(head);
+
+  var reqs  = d.requests || [];
+  var mine  = reqs.filter(function(r){ return r.claimedBy === ME; });
+  var open  = reqs.filter(function(r){ return r.status === "open"; });
+  var asked = reqs.filter(function(r){ return r.createdBy === ME && r.status !== "open"; });
+
+  /* --- shifts that need someone --- */
+  app.appendChild(el("h2", null, open.length ? "Needs a coach (" + open.length + ")" : "Needs a coach"));
+  if (!open.length) {
+    app.appendChild(el("div", "empty", "Nothing open right now. You'll see it here the moment someone asks."));
+  } else {
+    var l1 = el("div", "list");
+    open.forEach(function(r){ l1.appendChild(openCard(r)); });
+    app.appendChild(l1);
+  }
+
+  /* --- what I've taken --- */
+  if (mine.length) {
+    app.appendChild(el("h2", null, "You're covering (" + mine.length + ")"));
+    var l2 = el("div", "list");
+    mine.forEach(function(r){ l2.appendChild(mineCard(r)); });
+    app.appendChild(l2);
+  }
+
+  /* --- my own shifts, to hand over --- */
+  var taken = {};
+  reqs.forEach(function(r){ taken[r.key] = 1; });
+  var myShifts = (d.shifts || []).filter(function(s){
+    return s.coach === ME && !taken[s.key] && hoursUntil(s) > -2;
+  }).slice(0, 40);
+
+  app.appendChild(el("h2", null, "Your shifts"));
+  if (!myShifts.length) {
+    app.appendChild(el("div", "empty", "No upcoming shifts listed for you."));
+  } else {
+    var l3 = el("div", "list");
+    myShifts.forEach(function(s){ l3.appendChild(myShiftCard(s)); });
+    app.appendChild(l3);
+  }
+
+  if (asked.length) {
+    app.appendChild(el("h2", null, "You asked for cover"));
+    var l4 = el("div", "list");
+    asked.forEach(function(r){ l4.appendChild(askedCard(r)); });
+    app.appendChild(l4);
+  }
+
+  app.appendChild(el("p", "foot",
+    "Taking a shift here is a commitment — the coach who asked will stop looking. "
+    + "It still has to be changed in Arbox by an admin before it counts for pay."));
+}
+
+function gate(app, title, msg){
+  var g = el("div", "gate");
+  g.appendChild(el("h1", null, title));
+  if (msg) g.appendChild(el("p", null, msg));
+  app.appendChild(g);
+}
+
+function pickName(app, d){
+  var g = el("div", "gate");
+  g.appendChild(el("h1", null, "Who are you?"));
+  g.appendChild(el("p", null, "So the board can show your shifts and record who takes what."));
+  var sel = el("select");
+  var ph = el("option", null, "Pick your name…"); ph.value = ""; sel.appendChild(ph);
+  (d.coaches || []).forEach(function(c){ var o = el("option", null, c); o.value = c; sel.appendChild(o); });
+  g.appendChild(sel);
+  var go = el("button", "btn primary", "That's me");
+  go.style.marginTop = "12px"; go.disabled = true;
+  sel.addEventListener("change", function(){ go.disabled = !sel.value; });
+  go.addEventListener("click", function(){
+    ME = sel.value; try { localStorage.setItem("coach-name", ME); } catch(e){}
+    render();
+  });
+  g.appendChild(go);
+  app.appendChild(g);
+}
+
+function baseCard(r, cls, pillText){
+  var c = el("div", "card " + cls);
+  var top = el("div", "top");
+  top.appendChild(el("span", "when", when(r)));
+  top.appendChild(el("span", "box", shortBox(r.box)));
+  if (pillText) top.appendChild(el("span", "pill " + cls, pillText));
+  c.appendChild(top);
+  return c;
+}
+
+function openCard(r){
+  var c = baseCard(r, "open", "Needs a coach");
+  var sub = el("div", "sub");
+  sub.appendChild(document.createTextNode((r.klass || "class") + " · was "));
+  sub.appendChild(el("b", null, r.originalCoach || "unassigned"));
+  var h = hoursUntil(r);
+  if (h < 24 && h > -2) {
+    sub.appendChild(document.createTextNode(" · "));
+    sub.appendChild(el("span", "soon", h < 0 ? "starting now" : "in " + Math.max(1, Math.round(h)) + "h"));
+  }
+  c.appendChild(sub);
+
+  var acts = el("div", "acts");
+  if (r.createdBy === ME) {
+    acts.appendChild(el("span", "sub", "You asked for this one."));
+  } else {
+    var b = el("button", "btn primary", S.busy === r.id ? "…" : "I'll take it");
+    b.disabled = S.busy === r.id;
+    b.addEventListener("click", function(){ doClaim(r); });
+    acts.appendChild(b);
+  }
+  c.appendChild(acts);
+  return c;
+}
+
+function mineCard(r){
+  var label = r.status === "verified" ? "Confirmed" : (r.status === "claimed" ? "You took it" : "With the admin");
+  var c = baseCard(r, r.status === "claimed" ? "mine" : "waiting", label);
+  c.className = "card " + (r.status === "verified" ? "mine" : (r.status === "claimed" ? "mine" : "waiting"));
+  var sub = el("div", "sub");
+  sub.appendChild(document.createTextNode((r.klass || "class") + " · for "));
+  sub.appendChild(el("b", null, r.originalCoach || "someone"));
+  c.appendChild(sub);
+  if (r.status === "claimed") {
+    var acts = el("div", "acts");
+    var b = el("button", "btn", "Can't do it after all");
+    b.addEventListener("click", function(){ doRelease(r); });
+    acts.appendChild(b);
+    c.appendChild(acts);
+  }
+  return c;
+}
+
+function askedCard(r){
+  var c = baseCard(r, r.status === "verified" ? "mine" : "waiting",
+                   r.status === "verified" ? "Sorted" : "Covered");
+  var sub = el("div", "sub");
+  sub.appendChild(document.createTextNode((r.klass || "class") + " · "));
+  sub.appendChild(el("b", null, r.claimedBy || "someone"));
+  sub.appendChild(document.createTextNode(" is taking it"));
+  c.appendChild(sub);
+  return c;
+}
+
+function myShiftCard(s){
+  var c = baseCard(s, "", null);
+  c.appendChild(el("div", "sub", s.klass || "class"));
+  var acts = el("div", "acts");
+  var b = el("button", "btn", S.busy === s.key ? "…" : "I need cover for this");
+  b.disabled = S.busy === s.key;
+  b.addEventListener("click", function(){ doRaise(s); });
+  acts.appendChild(b);
+  c.appendChild(acts);
+  return c;
+}
+
+/* ------------------------------------------------------------------ actions */
+function doClaim(r){
+  S.busy = r.id; render();
+  rpc("claim_cover", { p_token: TOKEN, p_request: r.id, p_coach: ME }).then(function(res){
+    S.busy = null;
+    if (res && res.ok) {
+      toast(res.clash ? "Taken — but you're already on at another box then. Check it." : "Yours. Thanks.");
+    } else if (res && res.error === "taken") {
+      toast((res.takenBy || "Someone") + " got there first.");
+    } else {
+      toast("Couldn't take it — try again.");
+    }
+    return load();
+  }).catch(function(){ S.busy = null; toast("Couldn't reach the board."); render(); });
+}
+function doRelease(r){
+  S.busy = r.id; render();
+  rpc("release_cover", { p_token: TOKEN, p_request: r.id, p_coach: ME }).then(function(res){
+    S.busy = null;
+    toast(res && res.ok ? "Put back on the board." : "Too late to undo — tell the coach directly.");
+    return load();
+  }).catch(function(){ S.busy = null; toast("Couldn't reach the board."); render(); });
+}
+function doRaise(s){
+  S.busy = s.key; render();
+  rpc("raise_cover", { p_token: TOKEN, p_key: s.key, p_coach: ME }).then(function(res){
+    S.busy = null;
+    toast(res && res.ok ? "Asked. The others can see it now." : "Already on the board.");
+    return load();
+  }).catch(function(){ S.busy = null; toast("Couldn't reach the board."); render(); });
+}
+
+/* ------------------------------------------------------------------ boot */
+render();
+load();
+setInterval(function(){ if (!document.hidden && !S.busy) load(); }, 20000);
+document.addEventListener("visibilitychange", function(){ if (!document.hidden) load(); });
+</script>
+</body>
+</html>
