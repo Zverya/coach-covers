@@ -88,6 +88,12 @@ select,input[type=text]{font:inherit;font-size:15px;color:var(--ink);background:
   border:1px solid var(--line);border-radius:8px;padding:10px;width:100%}
 .gate{max-width:380px;margin:64px auto;text-align:center}
 .gate h1{margin-bottom:8px}
+.boxlabel{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-2);
+  font-weight:600;margin:14px 0 8px;text-align:left}
+.boxpick{display:flex;flex-direction:column;gap:6px;text-align:left}
+.boxrow{display:flex;align-items:center;gap:9px;padding:10px 12px;border:1px solid var(--line);
+  border-radius:8px;background:var(--surface);font-size:14px;cursor:pointer}
+.boxrow input{width:17px;height:17px;accent-color:var(--accent);cursor:pointer}
 .gate p{color:var(--ink-2);font-size:13.5px;margin:0 0 18px}
 /* week grid */
 .cal-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
@@ -161,6 +167,7 @@ var CONFIG = { url: "https://cdluysgpwnaddqljyzuz.supabase.co", key: "sb_publish
 var TOKEN = (location.hash.match(/t=([A-Za-z0-9_-]+)/) || [])[1] || "";
 var ME = null; try { ME = localStorage.getItem("coach-name"); } catch (e) {}
 var TAB = null; try { TAB = localStorage.getItem("coach-tab"); } catch (e) {}
+var MYBOXES = []; try { MYBOXES = JSON.parse(localStorage.getItem("coach-boxes")||"[]")||[]; } catch (e) { MYBOXES=[]; }
 
 var S = { loading:true, err:null, data:null, busy:null, tab:TAB||"schedule", weekStart:null };
 
@@ -214,6 +221,7 @@ function render(){
   if(S.err) return gate(app,"Something went wrong","Try again in a moment.");
   var d=S.data;
   if(!ME) return pickName(app,d);
+  if(S.editBoxes) return boxEditor(app,d);
 
   var head=el("header");
   head.appendChild(el("h1",null,(d.board&&d.board.name)||"Coach Covers"));
@@ -223,7 +231,12 @@ function render(){
   var sw=el("button",null,"not you?");
   sw.addEventListener("click",function(){ ME=null;
     try{localStorage.removeItem("coach-name");}catch(e){} render(); });
-  who.appendChild(sw); head.appendChild(who);
+  who.appendChild(sw);
+  who.appendChild(document.createTextNode(" \u00b7 "));
+  var bx=el("button",null,"boxes");
+  bx.addEventListener("click",function(){ S.editBoxes=true; render(); });
+  who.appendChild(bx);
+  head.appendChild(who);
   app.appendChild(head);
 
   var reqs=d.requests||[];
@@ -253,18 +266,61 @@ function render(){
 function gate(app,t,m){ var g=el("div","gate"); g.appendChild(el("h1",null,t));
   if(m) g.appendChild(el("p",null,m)); app.appendChild(g); }
 
+function boxCheckboxes(d, preselect){
+  var wrap=el("div","boxpick");
+  boxes().forEach(function(b){
+    var lab=el("label","boxrow");
+    var cb=el("input"); cb.type="checkbox"; cb.value=b; cb.checked=preselect.indexOf(b)>=0;
+    lab.appendChild(cb); lab.appendChild(el("span",null,shortBox(b)));
+    wrap.appendChild(lab);
+  });
+  return wrap;
+}
+function checkedBoxes(wrap){
+  var out=[]; Array.prototype.forEach.call(wrap.querySelectorAll("input:checked"),function(cb){ out.push(cb.value); });
+  return out;
+}
 function pickName(app,d){
   var g=el("div","gate");
   g.appendChild(el("h1",null,"Who are you?"));
-  g.appendChild(el("p",null,"So the board can show your shifts and record who takes what."));
-  var sel=el("select"); var ph=el("option",null,"Pick your name…"); ph.value=""; sel.appendChild(ph);
+  g.appendChild(el("p",null,"Pick your name, then tick the boxes you coach at \u2014 you'll be offered cover shifts at those."));
+  var sel=el("select"); var ph=el("option",null,"Pick your name\u2026"); ph.value=""; sel.appendChild(ph);
   (d.coaches||[]).forEach(function(c){ var o=el("option",null,c); o.value=c; sel.appendChild(o); });
   g.appendChild(sel);
+  var boxHost=el("div"); boxHost.hidden=true; g.appendChild(boxHost);
   var go=el("button","btn primary","That's me"); go.style.marginTop="12px"; go.disabled=true;
-  sel.addEventListener("change",function(){ go.disabled=!sel.value; });
-  go.addEventListener("click",function(){ ME=sel.value;
-    try{localStorage.setItem("coach-name",ME);}catch(e){} render(); });
+  sel.addEventListener("change",function(){
+    go.disabled=!sel.value;
+    boxHost.innerHTML=""; boxHost.hidden=!sel.value;
+    if(sel.value){
+      boxHost.appendChild(el("div","boxlabel","Boxes you coach at"));
+      var teaching={}; (d.shifts||[]).forEach(function(x){ if(x.coach===sel.value && x.box) teaching[x.box]=1; });
+      boxHost.appendChild(boxCheckboxes(d, Object.keys(teaching)));
+    }
+  });
+  go.addEventListener("click",function(){
+    ME=sel.value;
+    var wrap=boxHost.querySelector(".boxpick");
+    MYBOXES = wrap ? checkedBoxes(wrap) : [];
+    try{ localStorage.setItem("coach-name",ME); localStorage.setItem("coach-boxes",JSON.stringify(MYBOXES)); }catch(e){}
+    render();
+  });
   g.appendChild(go); app.appendChild(g);
+}
+function boxEditor(app,d){
+  var g=el("div","gate");
+  g.appendChild(el("h1",null,"Your boxes"));
+  g.appendChild(el("p",null,"Which boxes do you coach at? You'll be offered cover shifts at these."));
+  var wrap=boxCheckboxes(d, MYBOXES); g.appendChild(wrap);
+  var go=el("button","btn primary","Save"); go.style.marginTop="12px";
+  go.addEventListener("click",function(){
+    MYBOXES=checkedBoxes(wrap);
+    try{ localStorage.setItem("coach-boxes",JSON.stringify(MYBOXES)); }catch(e){}
+    S.editBoxes=false; render();
+  });
+  var back=el("button","btn ghost","Cancel"); back.style.marginTop="12px"; back.style.marginLeft="6px";
+  back.addEventListener("click",function(){ S.editBoxes=false; render(); });
+  g.appendChild(go); g.appendChild(back); app.appendChild(g);
 }
 
 /* ------------------------------------------------------------- my week */
@@ -294,6 +350,7 @@ function renderSchedule(app,d){
     (d.requests||[]).forEach(function(r){
       if(r.date!==ds || r.status!=="open") return;
       if(r.originalCoach===ME || r.createdBy===ME || r.claimedBy===ME) return;
+      if(MYBOXES.length && MYBOXES.indexOf(r.box)<0) return; // not a box I coach at
       if(myTimes.indexOf(hm(r.time))>=0) return; // I'm teaching then
       evs.push({t:mins(r.time), time:r.time, box:r.box, label:(r.klass||shortBox(r.box)),
                 kind:"take", st:"take", r:r});

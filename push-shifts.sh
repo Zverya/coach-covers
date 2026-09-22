@@ -49,4 +49,4 @@ RESP="$(curl -sS -m 45 -X POST "$SUPABASE_URL/rest/v1/rpc/push_shifts" \
   -d "$BODY")" || { echo "request failed" >&2; exit 1; }
 
 echo "$RESP"
-printf '%s' "$RESP" | grep -q '"ok":true' && echo "done." || { echo "push rejected — check ADMIN_TOKEN" >&2; exit 1; }
+printf '%s' "$RESP" | grep -q '"ok": *true' && echo "done." || { echo "push rejected — check ADMIN_TOKEN" >&2; exit 1; }
