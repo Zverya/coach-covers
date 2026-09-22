@@ -304,6 +304,30 @@ function checkedBoxes(wrap){
   var out=[]; Array.prototype.forEach.call(wrap.querySelectorAll("input:checked"),function(cb){ out.push(cb.value); });
   return out;
 }
+function addBoxForm(getName){
+  var wrap=el("div"); wrap.style.marginTop="22px"; wrap.style.textAlign="left";
+  var toggle=el("button","btn ghost","+ Coach at a gym that isn't listed? Add it"); toggle.type="button";
+  var form=el("div"); form.hidden=true; form.style.marginTop="10px";
+  form.appendChild(el("div","boxlabel","Gym name"));
+  var nm=el("input"); nm.type="text"; nm.placeholder="e.g. CrossFit Netanya"; form.appendChild(nm);
+  var lbl=el("div","boxlabel"); lbl.textContent="City or area (optional)"; lbl.style.marginTop="10px"; form.appendChild(lbl);
+  var lk=el("input"); lk.type="text"; lk.placeholder="e.g. Netanya \u2014 helps us find the right one"; form.appendChild(lk);
+  form.appendChild(el("p","foot","Just name the gym \u2014 we find its schedule and coaches and add it. Then it shows up here for everyone and your classes there become swappable."));
+  var send=el("button","btn primary","Add this gym"); send.type="button"; send.style.marginTop="6px";
+  send.addEventListener("click",function(){
+    if(!nm.value.trim()){ toast("Type the gym's name"); return; }
+    send.disabled=true;
+    rpc("submit_box",{p_token:TOKEN,p_coach:(getName&&getName())||ME||"(new coach)",p_name:nm.value.trim(),p_link:lk.value.trim()}).then(function(r){
+      send.disabled=false;
+      if(r&&r.ok){ toast("Got it \u2014 we'll add that gym shortly."); nm.value=""; lk.value=""; form.hidden=true; }
+      else toast("Couldn't send \u2014 try again.");
+    }).catch(function(){ send.disabled=false; toast("Couldn't reach the board."); });
+  });
+  form.appendChild(send);
+  toggle.addEventListener("click",function(){ form.hidden=!form.hidden; if(!form.hidden) nm.focus(); });
+  wrap.appendChild(toggle); wrap.appendChild(form);
+  return wrap;
+}
 function pickName(app,d){
   var g=el("div","gate");
   g.appendChild(el("h1",null,"Who are you?"));
@@ -313,19 +337,28 @@ function pickName(app,d){
   g.appendChild(sel);
   var boxHost=el("div"); boxHost.hidden=true; g.appendChild(boxHost);
   var go=el("button","btn primary","That's me"); go.style.marginTop="12px"; go.disabled=true;
+  function refresh(){
+    var bp=boxHost.querySelector(".boxpick");
+    var any=bp && bp.querySelectorAll("input:checked").length>0;
+    go.disabled = !(sel.value && any);
+  }
   sel.addEventListener("change",function(){
-    go.disabled=!sel.value;
     boxHost.innerHTML=""; boxHost.hidden=!sel.value;
     if(sel.value){
-      boxHost.appendChild(el("div","boxlabel","Boxes you coach at"));
+      boxHost.appendChild(el("div","boxlabel","Boxes you coach at (pick at least one)"));
       var teaching={}; (d.shifts||[]).forEach(function(x){ if(x.coach===sel.value && x.box) teaching[x.box]=1; });
-      boxHost.appendChild(boxCheckboxes(d, Object.keys(teaching)));
+      var bp=boxCheckboxes(d, Object.keys(teaching));
+      bp.addEventListener("change", refresh);
+      boxHost.appendChild(bp);
+      boxHost.appendChild(addBoxForm(function(){ return sel.value; }));
     }
+    refresh();
   });
   go.addEventListener("click",function(){
-    ME=sel.value;
     var wrap=boxHost.querySelector(".boxpick");
-    MYBOXES = wrap ? checkedBoxes(wrap) : [];
+    var chosen = wrap ? checkedBoxes(wrap) : [];
+    if(!chosen.length){ toast("Tick at least one box, or add your gym below"); return; }
+    ME=sel.value; MYBOXES=chosen;
     try{ localStorage.setItem("coach-name",ME); }catch(e){}
     S.boxesSynced=true; saveBoxes();
     render();
@@ -339,36 +372,15 @@ function boxEditor(app,d){
   var wrap=boxCheckboxes(d, MYBOXES); g.appendChild(wrap);
   var go=el("button","btn primary","Save"); go.style.marginTop="12px";
   go.addEventListener("click",function(){
-    MYBOXES=checkedBoxes(wrap); saveBoxes();
+    var chosen=checkedBoxes(wrap);
+    if(!chosen.length){ toast("Tick at least one box, or add your gym below"); return; }
+    MYBOXES=chosen; saveBoxes();
     S.editBoxes=false; render();
   });
   var back=el("button","btn ghost","Cancel"); back.style.marginTop="12px"; back.style.marginLeft="6px";
   back.addEventListener("click",function(){ S.editBoxes=false; render(); });
   g.appendChild(go); g.appendChild(back);
-
-  // --- coach somewhere the board doesn't cover yet ---
-  var addWrap=el("div"); addWrap.style.marginTop="22px"; addWrap.style.textAlign="left";
-  var toggle=el("button","btn ghost","+ Coach at another gym? Add it"); toggle.type="button";
-  var form=el("div"); form.hidden=true; form.style.marginTop="10px";
-  form.appendChild(el("div","boxlabel","Gym name"));
-  var nm=el("input"); nm.type="text"; nm.placeholder="e.g. CrossFit Netanya"; form.appendChild(nm);
-  var lbl=el("div","boxlabel"); lbl.textContent="Its public schedule link"; lbl.style.marginTop="10px"; form.appendChild(lbl);
-  var lk=el("input"); lk.type="text"; lk.placeholder="the gym's booking / schedule page link"; form.appendChild(lk);
-  form.appendChild(el("p","foot","The approver adds it in, then it appears here for everyone. Your classes there become swappable too."));
-  var send=el("button","btn primary","Send to the approver"); send.type="button"; send.style.marginTop="6px";
-  send.addEventListener("click",function(){
-    if(!nm.value.trim()){ toast("Type the gym's name"); return; }
-    send.disabled=true;
-    rpc("submit_box",{p_token:TOKEN,p_coach:ME,p_name:nm.value.trim(),p_link:lk.value.trim()}).then(function(r){
-      send.disabled=false;
-      if(r&&r.ok){ toast("Sent. The approver will add it."); nm.value=""; lk.value=""; form.hidden=true; }
-      else toast("Couldn't send \u2014 try again.");
-    }).catch(function(){ send.disabled=false; toast("Couldn't reach the board."); });
-  });
-  form.appendChild(send);
-  toggle.addEventListener("click",function(){ form.hidden=!form.hidden; if(!form.hidden) nm.focus(); });
-  addWrap.appendChild(toggle); addWrap.appendChild(form);
-  g.appendChild(addWrap);
+  g.appendChild(addBoxForm(function(){ return ME; }));
   app.appendChild(g);
 }
 
@@ -644,8 +656,12 @@ function renderApprovals(app,d){
       top.appendChild(el("span","box", bq.gym));
       top.appendChild(el("span","pill waiting", bq.by||"a coach"));
       c.appendChild(top);
-      if(bq.link){ var ln=el("div","sub"); ln.style.wordBreak="break-all"; ln.textContent=bq.link; c.appendChild(ln); }
-      c.appendChild(el("div","sub","Pull it in with:  ./add-box.sh \""+bq.gym+"\" \""+(bq.link||"LINK")+"\""));
+      var isUrl = bq.link && /^https?:\/\//.test(bq.link);
+      if(bq.link){ var ln=el("div","sub"); ln.style.wordBreak="break-all";
+        ln.textContent=(isUrl?"":"Where: ")+bq.link; c.appendChild(ln); }
+      c.appendChild(el("div","sub", isUrl
+        ? ("Pull it in:  ./add-box.sh \""+bq.gym+"\" \""+bq.link+"\"")
+        : ("Ask Claude to find "+bq.gym+"'s public schedule and add it.")));
       var a=el("div","acts");
       var addb=el("button","btn primary","Mark added"); addb.type="button";
       addb.addEventListener("click",function(){ resolveBox(bq.id,"added"); });
