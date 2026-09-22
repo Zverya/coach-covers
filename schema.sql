@@ -8,8 +8,9 @@ create extension if not exists pgcrypto;
 create table if not exists boards (
   id           uuid primary key default gen_random_uuid(),
   name         text not null,
-  share_token  text not null unique,   -- goes in the link you send coaches
-  admin_token  text not null unique,   -- only you and Claude hold this
+  share_token    text not null unique, -- link you send the coaches
+  approver_token text not null unique, -- link you send whoever approves swaps
+  admin_token    text not null unique, -- never in a link; used to push schedules
   created_at   timestamptz not null default now()
 );
 
@@ -36,10 +37,13 @@ create table if not exists requests (
   klass          text,
   original_coach text,
   status         text not null default 'open'
-                 check (status in ('open','claimed','sent','verified','mismatch','cancelled')),
+                 check (status in ('open','claimed','approved','rejected',
+                                   'verified','mismatch','cancelled')),
   claimed_by     text,
   claimed_at     timestamptz,
-  sent_at        timestamptz,
+  approved_at    timestamptz,
+  approved_by    text,
+  decision_note  text,
   checked_coach  text,
   checked_at     timestamptz,
   created_by     text,
@@ -59,22 +63,32 @@ alter table requests enable row level security;
 revoke all on boards, shifts, requests from anon, authenticated;
 
 -- ------------------------------------------------------------- functions
+-- Which board, and at what level, does this token open?
+create or replace function board_role(p_token text, out b_id uuid, out role text)
+language plpgsql stable security definer set search_path = public as $$
+begin
+  select id, 'admin' into b_id, role from boards where approver_token = p_token;
+  if b_id is not null then return; end if;
+  select id, 'coach' into b_id, role from boards where share_token = p_token;
+end $$;
+
 create or replace function board_id_for(p_token text)
 returns uuid language sql stable security definer set search_path = public as $$
-  select id from boards where share_token = p_token;
+  select b_id from board_role(p_token);
 $$;
 
 -- Everything the page needs, in one round trip.
 create or replace function board_state(p_token text)
 returns jsonb language plpgsql stable security definer set search_path = public as $$
-declare b_id uuid; out jsonb;
+declare b_id uuid; r text; out jsonb;
 begin
-  b_id := board_id_for(p_token);
+  select br.b_id, br.role into b_id, r from board_role(p_token) br;
   if b_id is null then
     return jsonb_build_object('ok', false, 'error', 'unknown_board');
   end if;
   select jsonb_build_object(
     'ok', true,
+    'role', r,
     'board', (select jsonb_build_object('name', name) from boards where id = b_id),
     'coaches', coalesce((
       select jsonb_agg(distinct coach order by coach)
@@ -90,7 +104,9 @@ begin
       select jsonb_agg(jsonb_build_object(
         'id', id, 'key', shift_key, 'date', shift_date, 'time', shift_time,
         'box', box, 'klass', klass, 'originalCoach', original_coach,
-        'status', status, 'claimedBy', claimed_by, 'createdBy', created_by)
+        'status', status, 'claimedBy', claimed_by, 'createdBy', created_by,
+        'approvedBy', approved_by, 'note', decision_note,
+        'checkedCoach', checked_coach)
         order by shift_date, shift_time)
       from requests where board_id = b_id and status <> 'cancelled'
     ), '[]'::jsonb)
@@ -194,21 +210,37 @@ begin
     from shifts s
    where s.board_id = r.board_id and s.shift_key = r.shift_key
      and r.board_id = b_id and r.claimed_by is not null
-     and r.status in ('sent','mismatch','verified');
+     and r.status in ('approved','mismatch','verified');
 
   return jsonb_build_object('ok', true, 'written', n);
 end $$;
 
-create or replace function mark_sent(p_admin text, p_request uuid)
+-- Approve a swap. Only the approver link can do this.
+create or replace function decide_cover(p_token text, p_request uuid,
+                                        p_approve boolean, p_who text, p_note text)
 returns jsonb language plpgsql security definer set search_path = public as $$
-declare b_id uuid; updated int;
+declare b_id uuid; r text; updated int;
 begin
-  select id into b_id from boards where admin_token = p_admin;
-  if b_id is null then return jsonb_build_object('ok', false, 'error', 'unknown_admin'); end if;
-  update requests set status = 'sent', sent_at = now()
-   where id = p_request and board_id = b_id and status = 'claimed';
+  select br.b_id, br.role into b_id, r from board_role(p_token) br;
+  if b_id is null or r <> 'admin' then
+    return jsonb_build_object('ok', false, 'error', 'not_approver');
+  end if;
+
+  if p_approve then
+    update requests
+       set status = 'approved', approved_at = now(),
+           approved_by = p_who, decision_note = nullif(trim(coalesce(p_note,'')), '')
+     where id = p_request and board_id = b_id and status in ('claimed','rejected');
+  else
+    -- turned down: the shift goes back on the board for someone else
+    update requests
+       set status = 'open', claimed_by = null, claimed_at = null,
+           approved_by = p_who, decision_note = nullif(trim(coalesce(p_note,'')), '')
+     where id = p_request and board_id = b_id and status in ('claimed','approved');
+  end if;
   get diagnostics updated = row_count;
-  return jsonb_build_object('ok', updated > 0);
+  if updated = 0 then return jsonb_build_object('ok', false, 'error', 'wrong_state'); end if;
+  return jsonb_build_object('ok', true);
 end $$;
 
 -- ------------------------------------------------------------- grants
@@ -217,22 +249,27 @@ revoke all on function raise_cover(text, text, text)    from public;
 revoke all on function claim_cover(text, uuid, text)    from public;
 revoke all on function release_cover(text, uuid, text)  from public;
 revoke all on function push_shifts(text, jsonb)         from public;
-revoke all on function mark_sent(text, uuid)            from public;
+revoke all on function decide_cover(text, uuid, boolean, text, text) from public;
+revoke all on function board_role(text)                from public;
 
 grant execute on function board_state(text)               to anon, authenticated;
 grant execute on function raise_cover(text, text, text)   to anon, authenticated;
 grant execute on function claim_cover(text, uuid, text)   to anon, authenticated;
 grant execute on function release_cover(text, uuid, text) to anon, authenticated;
 grant execute on function push_shifts(text, jsonb)        to anon, authenticated;
-grant execute on function mark_sent(text, uuid)           to anon, authenticated;
+grant execute on function decide_cover(text, uuid, boolean, text, text) to anon, authenticated;
 
 -- ------------------------------------------------- create your board
--- Runs once; prints the two tokens. Keep admin_token to yourself.
-insert into boards (name, share_token, admin_token)
-select 'Coach Covers', encode(gen_random_bytes(12), 'hex'), encode(gen_random_bytes(18), 'hex')
+-- Runs once; prints all three tokens. Keep the admin token out of any link.
+insert into boards (name, share_token, approver_token, admin_token)
+select 'Coach Covers',
+       encode(gen_random_bytes(12), 'hex'),
+       encode(gen_random_bytes(12), 'hex'),
+       encode(gen_random_bytes(18), 'hex')
 where not exists (select 1 from boards);
 
 select name,
-       share_token as "SHARE TOKEN  (goes in the coaches' link)",
-       admin_token as "ADMIN TOKEN  (keep private)"
+       share_token    as "COACH LINK token",
+       approver_token as "APPROVER LINK token",
+       admin_token    as "ADMIN token (never in a link)"
 from boards;

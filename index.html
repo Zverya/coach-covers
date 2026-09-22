@@ -13,350 +13,587 @@
   --ink:#171A24; --ink-2:#545B71; --ink-3:#858BA0;
   --accent:#2A3F9D; --accent-ink:#FFF; --accent-soft:#E7EAF7;
   --crit:#C0392B; --crit-bg:#FBEBE7; --warn:#9A6206; --warn-bg:#FAF0DC;
-  --ok:#14713C; --ok-bg:#E3F2E8;
-  --shadow:0 1px 2px rgba(23,26,36,.06);
+  --ok:#14713C; --ok-bg:#E3F2E8; --bad:#A31515; --bad-bg:#FAE8E8;
+  --c0:#2A3F9D; --c1:#0F766E; --c2:#7C3AED; --c3:#9A5B0A; --c4:#A81E5B; --c5:#14602F;
+  --chip-ink:#FFF; --shadow:0 1px 2px rgba(23,26,36,.06);
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#101219; --surface:#191C26; --surface-2:#212530; --line:#2C313F;
   --ink:#E9EBF3; --ink-2:#A2A9BF; --ink-3:#757D94;
   --accent:#8A9BF0; --accent-ink:#11131B; --accent-soft:#222840;
   --crit:#F08A72; --crit-bg:#2E1E1A; --warn:#E0B255; --warn-bg:#2C2417;
-  --ok:#6BC98C; --ok-bg:#16281D; --shadow:0 1px 2px rgba(0,0,0,.4);
+  --ok:#6BC98C; --ok-bg:#16281D; --bad:#EE8686; --bad-bg:#2E1A1A;
+  --c0:#94A6F5; --c1:#5ECFC2; --c2:#C4A3FF; --c3:#E0B255; --c4:#F2A0C4; --c5:#6BC98C;
+  --chip-ink:#12141B; --shadow:0 1px 2px rgba(0,0,0,.4);
 }}
-*{box-sizing:border-box}
-html,body{margin:0}
+*{box-sizing:border-box} html,body{margin:0}
 body{background:var(--bg); color:var(--ink); font-size:15px; line-height:1.5;
   font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   padding:env(safe-area-inset-top,0) 0 calc(28px + env(safe-area-inset-bottom,0))}
-.wrap{max-width:620px; margin:0 auto; padding-inline:16px}
-header{padding-block:20px 12px; display:flex; align-items:baseline; gap:10px; flex-wrap:wrap}
+.wrap{max-width:660px; margin:0 auto; padding-inline:16px}
+header{padding-block:20px 10px; display:flex; align-items:baseline; gap:10px; flex-wrap:wrap}
 h1{font-family:Oswald,sans-serif; font-weight:600; font-size:23px; text-transform:uppercase;
   letter-spacing:.02em; margin:0; line-height:1.1}
 .who{margin-left:auto; font-size:12px; color:var(--ink-2)}
 .who button{appearance:none;border:0;background:none;color:var(--accent);font:inherit;
   font-size:12px;cursor:pointer;text-decoration:underline;padding:0}
-h2{font-family:Oswald,sans-serif; font-weight:500; font-size:13.5px; text-transform:uppercase;
-  letter-spacing:.05em; margin:26px 0 9px; color:var(--ink-2)}
-h2:first-of-type{margin-top:16px}
-.list{display:flex; flex-direction:column; gap:8px}
-.card{background:var(--surface); border:1px solid var(--line); border-radius:10px;
-  box-shadow:var(--shadow); padding:11px 13px 11px 15px; position:relative; overflow:hidden}
-.card::before{content:""; position:absolute; inset:0 auto 0 0; width:4px; background:var(--ink-3)}
+.rolechip{font-size:10px;text-transform:uppercase;letter-spacing:.07em;font-weight:600;
+  padding:3px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent)}
+.tabs{display:flex;gap:2px;background:var(--surface-2);padding:3px;border-radius:10px;
+  border:1px solid var(--line);margin-bottom:16px}
+.tab{flex:1;appearance:none;border:0;background:transparent;font-family:inherit;font-size:12.5px;
+  font-weight:500;color:var(--ink-2);padding:8px 4px;border-radius:7px;cursor:pointer;white-space:nowrap}
+.tab[aria-selected="true"]{background:var(--surface);color:var(--ink);font-weight:600;box-shadow:var(--shadow)}
+.tab .cnt{display:inline-block;min-width:16px;margin-left:4px;padding:0 4px;border-radius:999px;
+  background:var(--crit);color:#fff;font-size:10px;font-weight:700;line-height:16px}
+h2{font-family:Oswald,sans-serif;font-weight:500;font-size:13px;text-transform:uppercase;
+  letter-spacing:.05em;margin:22px 0 8px;color:var(--ink-2)}
+h2:first-of-type{margin-top:4px}
+.list{display:flex;flex-direction:column;gap:8px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  box-shadow:var(--shadow);padding:11px 13px 11px 15px;position:relative;overflow:hidden}
+.card::before{content:"";position:absolute;inset:0 auto 0 0;width:4px;background:var(--ink-3)}
 .card.open::before{background:var(--crit)}
-.card.mine::before{background:var(--ok)}
+.card.mine::before,.card.done::before{background:var(--ok)}
 .card.waiting::before{background:var(--warn)}
-.top{display:flex; align-items:baseline; gap:9px; flex-wrap:wrap}
-.when{font-family:"IBM Plex Mono",monospace; font-size:13.5px; font-weight:500;
-  font-variant-numeric:tabular-nums; white-space:nowrap}
-.box{font-size:13px; color:var(--ink-2); font-weight:500}
-.pill{font-size:10px; text-transform:uppercase; letter-spacing:.06em; font-weight:600;
-  padding:3px 7px; border-radius:999px; margin-left:auto; white-space:nowrap}
-.pill.open{background:var(--crit-bg); color:var(--crit)}
-.pill.mine{background:var(--ok-bg); color:var(--ok)}
-.pill.waiting{background:var(--warn-bg); color:var(--warn)}
-.sub{font-size:13px; color:var(--ink-2); margin-top:5px}
-.sub b{color:var(--ink); font-weight:500}
-.soon{color:var(--crit); font-weight:600}
-.acts{display:flex; gap:6px; flex-wrap:wrap; margin-top:10px}
-button.btn{appearance:none; cursor:pointer; font-family:inherit; font-size:12.5px; font-weight:500;
-  padding:8px 13px; border-radius:7px; border:1px solid var(--line);
-  background:var(--surface-2); color:var(--ink)}
-button.btn.primary{background:var(--accent); color:var(--accent-ink); border-color:transparent; font-weight:600}
-button.btn:disabled{opacity:.5; cursor:not-allowed}
-button.btn:focus-visible{outline:2px solid var(--accent); outline-offset:1px}
-.empty{border:1px dashed var(--line); border-radius:10px; padding:20px 16px; text-align:center;
-  color:var(--ink-2); font-size:13.5px; background:var(--surface)}
-.note{background:var(--surface-2); border:1px solid var(--line); border-radius:10px;
-  padding:11px 13px; font-size:13px; color:var(--ink-2); margin-bottom:14px}
-.note.bad{background:var(--crit-bg); border-color:transparent; color:var(--crit)}
-select,input[type=text]{font:inherit; font-size:15px; color:var(--ink); background:var(--surface);
-  border:1px solid var(--line); border-radius:8px; padding:10px; width:100%}
-.gate{max-width:380px; margin:64px auto; text-align:center}
+.card.bad::before{background:var(--bad)}
+.top{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+.when{font-family:"IBM Plex Mono",monospace;font-size:13.5px;font-weight:500;
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+.box{font-size:13px;color:var(--ink-2);font-weight:500}
+.pill{font-size:10px;text-transform:uppercase;letter-spacing:.06em;font-weight:600;
+  padding:3px 7px;border-radius:999px;margin-left:auto;white-space:nowrap}
+.pill.open{background:var(--crit-bg);color:var(--crit)}
+.pill.mine,.pill.done{background:var(--ok-bg);color:var(--ok)}
+.pill.waiting{background:var(--warn-bg);color:var(--warn)}
+.pill.bad{background:var(--bad-bg);color:var(--bad)}
+.sub{font-size:13px;color:var(--ink-2);margin-top:5px}
+.sub b{color:var(--ink);font-weight:500}
+.arrow{color:var(--ink-3);padding-inline:3px}
+.soon{color:var(--crit);font-weight:600}
+.acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+button.btn{appearance:none;cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:500;
+  padding:8px 13px;border-radius:7px;border:1px solid var(--line);
+  background:var(--surface-2);color:var(--ink)}
+button.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent;font-weight:600}
+button.btn.ghost{background:transparent;color:var(--ink-2)}
+button.btn:disabled{opacity:.5;cursor:not-allowed}
+button.btn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.empty{border:1px dashed var(--line);border-radius:10px;padding:20px 16px;text-align:center;
+  color:var(--ink-2);font-size:13.5px;background:var(--surface)}
+.note{background:var(--warn-bg);border-radius:10px;padding:11px 13px;font-size:13px;
+  color:var(--warn);margin-bottom:14px;line-height:1.45}
+.note.bad{background:var(--bad-bg);color:var(--bad)}
+select,input[type=text]{font:inherit;font-size:15px;color:var(--ink);background:var(--surface);
+  border:1px solid var(--line);border-radius:8px;padding:10px;width:100%}
+.gate{max-width:380px;margin:64px auto;text-align:center}
 .gate h1{margin-bottom:8px}
-.gate p{color:var(--ink-2); font-size:13.5px; margin:0 0 18px}
-.toast{position:fixed; left:50%; transform:translateX(-50%);
-  bottom:calc(18px + env(safe-area-inset-bottom,0)); background:var(--ink); color:var(--bg);
-  font-size:13px; font-weight:500; padding:10px 16px; border-radius:999px; z-index:50;
-  box-shadow:0 4px 14px rgba(0,0,0,.2); max-width:90vw; text-align:center}
-.foot{color:var(--ink-3); font-size:11.5px; margin-top:26px; line-height:1.5}
+.gate p{color:var(--ink-2);font-size:13.5px;margin:0 0 18px}
+/* week grid */
+.cal-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.cal-title{font-family:Oswald,sans-serif;font-weight:600;font-size:16px;text-transform:uppercase;
+  letter-spacing:.04em;margin:0 auto 0 0}
+.cal-sum{font-size:12px;color:var(--ink-2);width:100%;margin:-4px 0 10px}
+.wk-grid{display:grid;grid-template-columns:46px repeat(7,1fr);border:1px solid var(--line);
+  border-radius:10px;overflow:hidden;background:var(--surface)}
+.wk-head{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);
+  font-weight:600;text-align:center;padding:6px 2px;border-bottom:1px solid var(--line);
+  border-left:1px solid var(--line)}
+.wk-head.today{color:var(--accent)}
+.wk-head b{display:block;font-size:12px;color:var(--ink-2);font-weight:600;font-variant-numeric:tabular-nums}
+.wk-head.today b{color:var(--accent)}
+.wk-headgutter{border-bottom:1px solid var(--line)}
+.wk-gutter{position:relative}
+.wk-hour{position:absolute;right:5px;font-size:9.5px;color:var(--ink-3);
+  font-variant-numeric:tabular-nums;transform:translateY(-50%)}
+.wk-col{position:relative;border-left:1px solid var(--line)}
+.wk-line{position:absolute;left:0;right:0;border-top:1px solid var(--line);opacity:.45}
+.wk-ev{position:absolute;left:2px;right:2px;border-radius:4px;padding:2px 4px;color:var(--chip-ink);
+  font-size:9.5px;line-height:1.25;overflow:hidden;cursor:pointer;border:0;text-align:left;
+  font-family:inherit;display:block}
+.wk-ev b{display:block;font-weight:600;font-variant-numeric:tabular-nums}
+.wk-ev.asked{opacity:.5;text-decoration:line-through}
+.wk-list{display:none}
+.wk-day{margin-bottom:13px}
+.wk-day h4{font-family:Oswald,sans-serif;font-weight:500;font-size:12px;text-transform:uppercase;
+  letter-spacing:.05em;margin:0 0 5px;color:var(--ink-2)}
+.wk-day.today h4{color:var(--accent)}
+.wk-none{font-size:12px;color:var(--ink-3);padding:2px 0 0 1px}
+.legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
+.key{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2)}
+.key i{width:9px;height:9px;border-radius:2px;display:block;flex:none}
+@media (max-width:640px){ .wk-grid{display:none} .wk-list{display:block} }
+.toast{position:fixed;left:50%;transform:translateX(-50%);
+  bottom:calc(18px + env(safe-area-inset-bottom,0));background:var(--ink);color:var(--bg);
+  font-size:13px;font-weight:500;padding:10px 16px;border-radius:999px;z-index:50;
+  box-shadow:0 4px 14px rgba(0,0,0,.2);max-width:90vw;text-align:center}
+.foot{color:var(--ink-3);font-size:11.5px;margin-top:26px;line-height:1.5}
 </style>
 </head>
 <body>
 <div class="wrap" id="app"></div>
 <script>
-/* ------------------------------------------------------------------ config
-   Filled in after the Supabase project exists. The anon key is meant to be
-   public: every table has row-level security on with no policies, so this key
-   can only call the functions in schema.sql, and each one checks the token. */
-var CONFIG = {
-  url: "__SUPABASE_URL__",
-  key: "__SUPABASE_ANON_KEY__"
-};
+var CONFIG = { url: "__SUPABASE_URL__", key: "__SUPABASE_ANON_KEY__" };
 
 var TOKEN = (location.hash.match(/t=([A-Za-z0-9_-]+)/) || [])[1] || "";
-var ME = null;
-try { ME = localStorage.getItem("coach-name"); } catch (e) {}
+var ME = null; try { ME = localStorage.getItem("coach-name"); } catch (e) {}
+var TAB = null; try { TAB = localStorage.getItem("coach-tab"); } catch (e) {}
 
-var S = { loading: true, err: null, data: null, busy: null };
+var S = { loading:true, err:null, data:null, busy:null, tab:TAB||"schedule", weekStart:null };
 
-function $(sel, root){ return (root || document).querySelector(sel); }
-function el(tag, cls, txt){ var n = document.createElement(tag); if (cls) n.className = cls;
-  if (txt != null) n.textContent = txt; return n; }
-function pad(n){ return (n < 10 ? "0" : "") + n; }
+function $(s,r){ return (r||document).querySelector(s); }
+function el(t,c,x){ var n=document.createElement(t); if(c)n.className=c; if(x!=null)n.textContent=x; return n; }
+function pad(n){ return (n<10?"0":"")+n; }
+function iso(d){ return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
+function sundayOf(d){ var x=new Date(d.getTime()); x.setHours(0,0,0,0); x.setDate(x.getDate()-x.getDay()); return x; }
+function mins(t){ var p=String(t||"").slice(0,5).split(":"); var h=+p[0],m=+p[1];
+  return (isNaN(h)?0:h)*60+(isNaN(m)?0:m); }
+function shortBox(n){ return String(n||"").replace(/^\s*crossfit\s+/i,"").trim()||String(n||""); }
+function hm(t){ return String(t||"").slice(0,5); }
 
-function rpc(fn, args){
-  return fetch(CONFIG.url + "/rest/v1/rpc/" + fn, {
-    method: "POST",
-    headers: { "apikey": CONFIG.key, "Authorization": "Bearer " + CONFIG.key,
-               "Content-Type": "application/json" },
-    body: JSON.stringify(args)
-  }).then(function(r){
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    return r.json();
-  });
+function rpc(fn,args){
+  return fetch(CONFIG.url+"/rest/v1/rpc/"+fn,{ method:"POST",
+    headers:{ "apikey":CONFIG.key, "Authorization":"Bearer "+CONFIG.key, "Content-Type":"application/json" },
+    body:JSON.stringify(args) }).then(function(r){
+      if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); });
 }
-function toast(msg){
-  var old = document.querySelector(".toast"); if (old) old.remove();
-  var t = el("div", "toast", msg); document.body.appendChild(t);
-  setTimeout(function(){ if (t.parentNode) t.remove(); }, 2800);
-}
-function when(r){
-  var d = new Date(r.date + "T00:00:00");
-  var days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-  if (isNaN(d.getTime())) return r.date + " " + r.time;
-  return days[d.getDay()] + " " + pad(d.getDate()) + "/" + pad(d.getMonth() + 1)
-         + "  " + String(r.time).slice(0, 5);
-}
-function hoursUntil(r){
-  var d = new Date(r.date + "T" + String(r.time).slice(0,5) + ":00");
-  return isNaN(d.getTime()) ? Infinity : (d.getTime() - Date.now()) / 3600000;
-}
-function shortBox(n){ return String(n || "").replace(/^\s*crossfit\s+/i, "").trim() || String(n || ""); }
+function toast(m){ var o=document.querySelector(".toast"); if(o)o.remove();
+  var t=el("div","toast",m); document.body.appendChild(t);
+  setTimeout(function(){ if(t.parentNode)t.remove(); },3000); }
+function when(r){ var d=new Date(r.date+"T00:00:00");
+  var days=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  if(isNaN(d.getTime())) return r.date+" "+hm(r.time);
+  return days[d.getDay()]+" "+pad(d.getDate())+"/"+pad(d.getMonth()+1)+"  "+hm(r.time); }
+function hoursUntil(r){ var d=new Date(r.date+"T"+hm(r.time)+":00");
+  return isNaN(d.getTime())?Infinity:(d.getTime()-Date.now())/3600000; }
+function isAdmin(){ return S.data && S.data.role==="admin"; }
+
+function boxes(){ var seen={},o=[]; ((S.data&&S.data.shifts)||[]).forEach(function(s){
+  var b=(s.box||"").trim(); if(b&&!seen[b]){seen[b]=1;o.push(b);} }); return o.sort(); }
+function boxColor(b){ var i=boxes().indexOf((b||"").trim()); return "var(--c"+(i<0?0:i%6)+")"; }
 
 function load(){
-  return rpc("board_state", { p_token: TOKEN }).then(function(res){
-    S.loading = false;
-    if (!res || res.ok === false) { S.err = (res && res.error) || "unknown"; }
-    else { S.err = null; S.data = res; }
+  return rpc("board_state",{p_token:TOKEN}).then(function(res){
+    S.loading=false;
+    if(!res||res.ok===false){ S.err=(res&&res.error)||"unknown"; }
+    else { S.err=null; S.data=res; }
     render();
-  }).catch(function(e){
-    S.loading = false; S.err = "network"; render();
-  });
+  }).catch(function(){ S.loading=false; S.err="network"; render(); });
 }
 
-/* ------------------------------------------------------------------ render */
+/* ---------------------------------------------------------------- render */
 function render(){
-  var app = $("#app"); app.innerHTML = "";
+  var app=$("#app"); app.innerHTML="";
+  if(!TOKEN) return gate(app,"This link is missing its code","Ask whoever sent it for the full link — it ends in #t= then a code.");
+  if(S.loading) return gate(app,"Loading…","");
+  if(S.err==="network") return gate(app,"Can't reach the board","Check your connection, then refresh.");
+  if(S.err==="unknown_board") return gate(app,"This link doesn't work","The code isn't recognised. Ask for a fresh link.");
+  if(S.err) return gate(app,"Something went wrong","Try again in a moment.");
+  var d=S.data;
+  if(!ME) return pickName(app,d);
 
-  if (!TOKEN)          return gate(app, "This link is missing its code", "Ask whoever sent it for the full link — it should end in #t= followed by a code.");
-  if (S.loading)       return gate(app, "Loading…", "");
-  if (S.err === "network")       return gate(app, "Can't reach the board", "Check your connection and pull to refresh.");
-  if (S.err === "unknown_board") return gate(app, "This link doesn't work", "The code isn't recognised. Ask for a fresh link.");
-  if (S.err)           return gate(app, "Something went wrong", "Try again in a moment.");
-
-  var d = S.data;
-  if (!ME) return pickName(app, d);
-
-  var head = el("header");
-  head.appendChild(el("h1", null, d.board && d.board.name ? d.board.name : "Coach Covers"));
-  var who = el("div", "who");
-  who.appendChild(document.createTextNode(ME + " · "));
-  var sw = el("button", null, "not you?");
-  sw.addEventListener("click", function(){ ME = null; try { localStorage.removeItem("coach-name"); } catch(e){} render(); });
-  who.appendChild(sw);
-  head.appendChild(who);
+  var head=el("header");
+  head.appendChild(el("h1",null,(d.board&&d.board.name)||"Coach Covers"));
+  if(isAdmin()) head.appendChild(el("span","rolechip","Approver"));
+  var who=el("div","who");
+  who.appendChild(document.createTextNode(ME+" · "));
+  var sw=el("button",null,"not you?");
+  sw.addEventListener("click",function(){ ME=null;
+    try{localStorage.removeItem("coach-name");}catch(e){} render(); });
+  who.appendChild(sw); head.appendChild(who);
   app.appendChild(head);
 
-  var reqs  = d.requests || [];
-  var mine  = reqs.filter(function(r){ return r.claimedBy === ME; });
-  var open  = reqs.filter(function(r){ return r.status === "open"; });
-  var asked = reqs.filter(function(r){ return r.createdBy === ME && r.status !== "open"; });
+  var reqs=d.requests||[];
+  var waiting=reqs.filter(function(r){ return r.status==="claimed"; });
+  var openN=reqs.filter(function(r){ return r.status==="open"; }).length;
 
-  /* --- shifts that need someone --- */
-  app.appendChild(el("h2", null, open.length ? "Needs a coach (" + open.length + ")" : "Needs a coach"));
-  if (!open.length) {
-    app.appendChild(el("div", "empty", "Nothing open right now. You'll see it here the moment someone asks."));
-  } else {
-    var l1 = el("div", "list");
-    open.forEach(function(r){ l1.appendChild(openCard(r)); });
-    app.appendChild(l1);
+  var tabs=el("div","tabs");
+  function tb(id,label,count){
+    var b=el("button","tab"); b.type="button"; b.setAttribute("role","tab");
+    b.setAttribute("aria-selected", S.tab===id?"true":"false");
+    b.appendChild(document.createTextNode(label));
+    if(count) { var c=el("span","cnt",String(count)); b.appendChild(c); }
+    b.addEventListener("click",function(){ S.tab=id;
+      try{localStorage.setItem("coach-tab",id);}catch(e){} render(); });
+    tabs.appendChild(b);
   }
+  tb("schedule","My week",0);
+  tb("covers","Covers",openN);
+  if(isAdmin()) tb("approvals","Approvals",waiting.length);
+  app.appendChild(tabs);
 
-  /* --- what I've taken --- */
-  if (mine.length) {
-    app.appendChild(el("h2", null, "You're covering (" + mine.length + ")"));
-    var l2 = el("div", "list");
-    mine.forEach(function(r){ l2.appendChild(mineCard(r)); });
-    app.appendChild(l2);
-  }
-
-  /* --- my own shifts, to hand over --- */
-  var taken = {};
-  reqs.forEach(function(r){ taken[r.key] = 1; });
-  var myShifts = (d.shifts || []).filter(function(s){
-    return s.coach === ME && !taken[s.key] && hoursUntil(s) > -2;
-  }).slice(0, 40);
-
-  app.appendChild(el("h2", null, "Your shifts"));
-  if (!myShifts.length) {
-    app.appendChild(el("div", "empty", "No upcoming shifts listed for you."));
-  } else {
-    var l3 = el("div", "list");
-    myShifts.forEach(function(s){ l3.appendChild(myShiftCard(s)); });
-    app.appendChild(l3);
-  }
-
-  if (asked.length) {
-    app.appendChild(el("h2", null, "You asked for cover"));
-    var l4 = el("div", "list");
-    asked.forEach(function(r){ l4.appendChild(askedCard(r)); });
-    app.appendChild(l4);
-  }
-
-  app.appendChild(el("p", "foot",
-    "Taking a shift here is a commitment — the coach who asked will stop looking. "
-    + "It still has to be changed in Arbox by an admin before it counts for pay."));
+  if(S.tab==="schedule") renderSchedule(app,d);
+  else if(S.tab==="approvals" && isAdmin()) renderApprovals(app,d);
+  else renderCovers(app,d);
 }
 
-function gate(app, title, msg){
-  var g = el("div", "gate");
-  g.appendChild(el("h1", null, title));
-  if (msg) g.appendChild(el("p", null, msg));
-  app.appendChild(g);
-}
+function gate(app,t,m){ var g=el("div","gate"); g.appendChild(el("h1",null,t));
+  if(m) g.appendChild(el("p",null,m)); app.appendChild(g); }
 
-function pickName(app, d){
-  var g = el("div", "gate");
-  g.appendChild(el("h1", null, "Who are you?"));
-  g.appendChild(el("p", null, "So the board can show your shifts and record who takes what."));
-  var sel = el("select");
-  var ph = el("option", null, "Pick your name…"); ph.value = ""; sel.appendChild(ph);
-  (d.coaches || []).forEach(function(c){ var o = el("option", null, c); o.value = c; sel.appendChild(o); });
+function pickName(app,d){
+  var g=el("div","gate");
+  g.appendChild(el("h1",null,"Who are you?"));
+  g.appendChild(el("p",null,"So the board can show your shifts and record who takes what."));
+  var sel=el("select"); var ph=el("option",null,"Pick your name…"); ph.value=""; sel.appendChild(ph);
+  (d.coaches||[]).forEach(function(c){ var o=el("option",null,c); o.value=c; sel.appendChild(o); });
   g.appendChild(sel);
-  var go = el("button", "btn primary", "That's me");
-  go.style.marginTop = "12px"; go.disabled = true;
-  sel.addEventListener("change", function(){ go.disabled = !sel.value; });
-  go.addEventListener("click", function(){
-    ME = sel.value; try { localStorage.setItem("coach-name", ME); } catch(e){}
-    render();
-  });
-  g.appendChild(go);
-  app.appendChild(g);
+  var go=el("button","btn primary","That's me"); go.style.marginTop="12px"; go.disabled=true;
+  sel.addEventListener("change",function(){ go.disabled=!sel.value; });
+  go.addEventListener("click",function(){ ME=sel.value;
+    try{localStorage.setItem("coach-name",ME);}catch(e){} render(); });
+  g.appendChild(go); app.appendChild(g);
 }
 
-function baseCard(r, cls, pillText){
-  var c = el("div", "card " + cls);
-  var top = el("div", "top");
-  top.appendChild(el("span", "when", when(r)));
-  top.appendChild(el("span", "box", shortBox(r.box)));
-  if (pillText) top.appendChild(el("span", "pill " + cls, pillText));
+/* ------------------------------------------------------------- my week */
+function renderSchedule(app,d){
+  var today=new Date(); today.setHours(0,0,0,0);
+  if(!S.weekStart) S.weekStart=iso(sundayOf(today));
+  var ws=new Date(S.weekStart+"T00:00:00");
+  var days=[]; for(var i=0;i<7;i++){ var x=new Date(ws.getTime()); x.setDate(x.getDate()+i); days.push(iso(x)); }
+
+  var reqByKey={}; (d.requests||[]).forEach(function(r){ reqByKey[r.key]=r; });
+  var mineAll=(d.shifts||[]).filter(function(s){ return s.coach===ME; });
+  var inWeek=mineAll.filter(function(s){ return days.indexOf(s.date)>=0; });
+
+  var months=["January","February","March","April","May","June","July","August","September","October","November","December"];
+  var we=new Date(ws.getTime()); we.setDate(we.getDate()+6);
+  var h=el("div","cal-head");
+  h.appendChild(el("h2","cal-title",pad(ws.getDate())+"–"+pad(we.getDate())+" "+months[we.getMonth()]));
+  function nav(lbl,fn){ var b=el("button","btn",lbl); b.type="button";
+    b.addEventListener("click",fn); h.appendChild(b); }
+  nav("←",function(){ var w=new Date(S.weekStart+"T00:00:00"); w.setDate(w.getDate()-7);
+    S.weekStart=iso(w); render(); });
+  nav("Today",function(){ S.weekStart=iso(sundayOf(new Date())); render(); });
+  nav("→",function(){ var w=new Date(S.weekStart+"T00:00:00"); w.setDate(w.getDate()+7);
+    S.weekStart=iso(w); render(); });
+  var sum=el("p","cal-sum", inWeek.length
+    ? inWeek.length+" "+(inWeek.length===1?"class":"classes")+" for you this week"
+    : "Nothing for you this week.");
+  h.appendChild(sum);
+  app.appendChild(h);
+
+  var minH=6,maxH=21;
+  if(inWeek.length){ var ms=inWeek.map(function(x){return mins(x.time);});
+    minH=Math.max(0,Math.floor(Math.min.apply(null,ms)/60)-1);
+    maxH=Math.min(24,Math.ceil(Math.max.apply(null,ms)/60)+2);
+    if(maxH-minH<6) maxH=Math.min(24,minH+6); }
+  var ROW=34,PAD=9,H=(maxH-minH)*ROW+PAD*2;
+  var dow=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+  var g=el("div","wk-grid");
+  g.appendChild(el("div","wk-headgutter"));
+  days.forEach(function(ds,i){
+    var hd=el("div","wk-head"+(ds===iso(today)?" today":""));
+    hd.appendChild(el("span",null,dow[i]));
+    hd.appendChild(el("b",null,String(new Date(ds+"T00:00:00").getDate())));
+    g.appendChild(hd);
+  });
+  var gut=el("div","wk-gutter"); gut.style.height=H+"px";
+  for(var hh=minH;hh<=maxH;hh++){ var lb=el("div","wk-hour",pad(hh)+":00");
+    lb.style.top=(PAD+(hh-minH)*ROW)+"px"; gut.appendChild(lb); }
+  g.appendChild(gut);
+
+  days.forEach(function(ds){
+    var col=el("div","wk-col"); col.style.height=H+"px";
+    for(var hh=minH+1;hh<maxH;hh++){ var ln=el("div","wk-line");
+      ln.style.top=(PAD+(hh-minH)*ROW)+"px"; col.appendChild(ln); }
+    inWeek.filter(function(s){ return s.date===ds; })
+      .sort(function(a,b){ return mins(a.time)-mins(b.time); })
+      .forEach(function(s){
+        var r=reqByKey[s.key];
+        var ev=el("button","wk-ev"+(r?" asked":"")); ev.type="button";
+        ev.style.background=boxColor(s.box);
+        ev.style.top=(PAD+((mins(s.time)-minH*60)/60)*ROW)+"px";
+        ev.style.height=(ROW-3)+"px";
+        ev.appendChild(el("b",null,hm(s.time)));
+        ev.appendChild(el("span",null,s.klass||shortBox(s.box)));
+        ev.title=hm(s.time)+" "+(s.klass||"")+" — "+s.box;
+        ev.addEventListener("click",function(){ if(!r) doRaise(s); else toast("Already on the board."); });
+        col.appendChild(ev);
+      });
+    g.appendChild(col);
+  });
+  app.appendChild(g);
+
+  var L=el("div","wk-list");
+  days.forEach(function(ds,i){
+    var list=inWeek.filter(function(s){ return s.date===ds; })
+      .sort(function(a,b){ return mins(a.time)-mins(b.time); });
+    var wrap=el("div","wk-day"+(ds===iso(today)?" today":""));
+    var dd=new Date(ds+"T00:00:00");
+    wrap.appendChild(el("h4",null,dow[i]+" "+pad(dd.getDate())+"/"+pad(dd.getMonth()+1)));
+    if(!list.length) wrap.appendChild(el("div","wk-none","—"));
+    list.forEach(function(s){
+      var r=reqByKey[s.key];
+      var c=el("div","card"+(r?" waiting":""));
+      var top=el("div","top");
+      top.appendChild(el("span","when",hm(s.time)));
+      top.appendChild(el("span","box",shortBox(s.box)));
+      if(r) top.appendChild(el("span","pill waiting", r.claimedBy?("Covered by "+r.claimedBy):"Asking"));
+      c.appendChild(top);
+      c.appendChild(el("div","sub",s.klass||"class"));
+      if(!r){
+        var a=el("div","acts");
+        var b=el("button","btn",S.busy===s.key?"…":"I need cover for this");
+        b.disabled=S.busy===s.key;
+        b.addEventListener("click",function(){ doRaise(s); });
+        a.appendChild(b); c.appendChild(a);
+      }
+      wrap.appendChild(c);
+    });
+    L.appendChild(wrap);
+  });
+  app.appendChild(L);
+
+  var lg=el("div","legend");
+  boxes().forEach(function(b){
+    var n=inWeek.filter(function(x){ return (x.box||"").trim()===b; }).length;
+    var k=el("div","key"); var sw=el("i"); sw.style.background=boxColor(b);
+    k.appendChild(sw); k.appendChild(el("span",null,shortBox(b)+(n?" · "+n:"")));
+    lg.appendChild(k);
+  });
+  app.appendChild(lg);
+  app.appendChild(el("p","foot","Tap any class to ask for cover. It goes on the board straight away and the other coaches can see it."));
+}
+
+/* -------------------------------------------------------------- covers */
+function cardFor(r,cls,pill){
+  var c=el("div","card "+cls);
+  var top=el("div","top");
+  top.appendChild(el("span","when",when(r)));
+  top.appendChild(el("span","box",shortBox(r.box)));
+  if(pill) top.appendChild(el("span","pill "+cls,pill));
   c.appendChild(top);
   return c;
 }
+function renderCovers(app,d){
+  var reqs=d.requests||[];
+  var open=reqs.filter(function(r){ return r.status==="open"; });
+  var mine=reqs.filter(function(r){ return r.claimedBy===ME; });
+  var asked=reqs.filter(function(r){ return r.createdBy===ME && r.status!=="open"; });
 
-function openCard(r){
-  var c = baseCard(r, "open", "Needs a coach");
-  var sub = el("div", "sub");
-  sub.appendChild(document.createTextNode((r.klass || "class") + " · was "));
-  sub.appendChild(el("b", null, r.originalCoach || "unassigned"));
-  var h = hoursUntil(r);
-  if (h < 24 && h > -2) {
-    sub.appendChild(document.createTextNode(" · "));
-    sub.appendChild(el("span", "soon", h < 0 ? "starting now" : "in " + Math.max(1, Math.round(h)) + "h"));
+  app.appendChild(el("h2",null,open.length?("Needs a coach ("+open.length+")"):"Needs a coach"));
+  if(!open.length) app.appendChild(el("div","empty","Nothing open right now."));
+  else { var l=el("div","list"); open.forEach(function(r){
+    var c=cardFor(r,"open","Needs a coach");
+    var s=el("div","sub");
+    s.appendChild(document.createTextNode((r.klass||"class")+" · was "));
+    s.appendChild(el("b",null,r.originalCoach||"unassigned"));
+    var h=hoursUntil(r);
+    if(h<24&&h>-2){ s.appendChild(document.createTextNode(" · "));
+      s.appendChild(el("span","soon",h<0?"starting now":"in "+Math.max(1,Math.round(h))+"h")); }
+    c.appendChild(s);
+    var a=el("div","acts");
+    if(r.createdBy===ME) a.appendChild(el("span","sub","You asked for this one."));
+    else { var b=el("button","btn primary",S.busy===r.id?"…":"I'll take it");
+      b.disabled=S.busy===r.id; b.addEventListener("click",function(){ doClaim(r); }); a.appendChild(b); }
+    c.appendChild(a); l.appendChild(c); }); app.appendChild(l); }
+
+  if(mine.length){
+    app.appendChild(el("h2",null,"You're covering ("+mine.length+")"));
+    var l2=el("div","list");
+    mine.forEach(function(r){
+      var cls = r.status==="verified" ? "done" : (r.status==="claimed" ? "waiting" : (r.status==="mismatch"?"bad":"mine"));
+      var pill = r.status==="claimed" ? "Waiting for approval"
+               : r.status==="approved" ? "Approved"
+               : r.status==="verified" ? "Confirmed"
+               : r.status==="mismatch" ? "Not in Arbox yet" : r.status;
+      var c=cardFor(r,cls,pill);
+      var s=el("div","sub");
+      s.appendChild(document.createTextNode((r.klass||"class")+" · for "));
+      s.appendChild(el("b",null,r.originalCoach||"someone"));
+      c.appendChild(s);
+      if(r.note) c.appendChild(el("div","sub","Note: "+r.note));
+      if(r.status==="claimed"){
+        var a=el("div","acts");
+        var b=el("button","btn","Can't do it after all");
+        b.addEventListener("click",function(){ doRelease(r); });
+        a.appendChild(b); c.appendChild(a);
+      }
+      l2.appendChild(c);
+    });
+    app.appendChild(l2);
   }
-  c.appendChild(sub);
 
-  var acts = el("div", "acts");
-  if (r.createdBy === ME) {
-    acts.appendChild(el("span", "sub", "You asked for this one."));
-  } else {
-    var b = el("button", "btn primary", S.busy === r.id ? "…" : "I'll take it");
-    b.disabled = S.busy === r.id;
-    b.addEventListener("click", function(){ doClaim(r); });
-    acts.appendChild(b);
+  if(asked.length){
+    app.appendChild(el("h2",null,"You asked for cover"));
+    var l3=el("div","list");
+    asked.forEach(function(r){
+      var cls = r.status==="verified" ? "done" : (r.status==="claimed"?"waiting":"mine");
+      var pill = r.status==="claimed" ? "Awaiting approval"
+               : r.status==="approved" ? "Approved"
+               : r.status==="verified" ? "Sorted" : r.status;
+      var c=cardFor(r,cls,pill);
+      var s=el("div","sub");
+      s.appendChild(document.createTextNode((r.klass||"class")+" · "));
+      s.appendChild(el("b",null,r.claimedBy||"nobody yet"));
+      if(r.claimedBy) s.appendChild(document.createTextNode(" is taking it"));
+      c.appendChild(s);
+      l3.appendChild(c);
+    });
+    app.appendChild(l3);
   }
-  c.appendChild(acts);
-  return c;
+
+  app.appendChild(el("p","foot","Taking a shift is a commitment — the coach who asked stops looking. "
+    +"It only counts for pay once an approver signs it off and it changes in Arbox."));
 }
 
-function mineCard(r){
-  var label = r.status === "verified" ? "Confirmed" : (r.status === "claimed" ? "You took it" : "With the admin");
-  var c = baseCard(r, r.status === "claimed" ? "mine" : "waiting", label);
-  c.className = "card " + (r.status === "verified" ? "mine" : (r.status === "claimed" ? "mine" : "waiting"));
-  var sub = el("div", "sub");
-  sub.appendChild(document.createTextNode((r.klass || "class") + " · for "));
-  sub.appendChild(el("b", null, r.originalCoach || "someone"));
-  c.appendChild(sub);
-  if (r.status === "claimed") {
-    var acts = el("div", "acts");
-    var b = el("button", "btn", "Can't do it after all");
-    b.addEventListener("click", function(){ doRelease(r); });
-    acts.appendChild(b);
-    c.appendChild(acts);
+/* ----------------------------------------------------------- approvals */
+function renderApprovals(app,d){
+  var reqs=d.requests||[];
+  var waiting=reqs.filter(function(r){ return r.status==="claimed"; });
+  var approved=reqs.filter(function(r){ return r.status==="approved"; });
+  var open=reqs.filter(function(r){ return r.status==="open"; });
+  var bad=reqs.filter(function(r){ return r.status==="mismatch"; });
+  var done=reqs.filter(function(r){ return r.status==="verified"; });
+
+  if(bad.length){
+    var n=el("div","note bad");
+    n.textContent=bad.length+" approved "+(bad.length===1?"swap has":"swaps have")
+      +" not been changed in Arbox yet. Until that happens the original coach gets paid.";
+    app.appendChild(n);
   }
-  return c;
+
+  app.appendChild(el("h2",null,waiting.length?("Waiting for you ("+waiting.length+")"):"Waiting for you"));
+  if(!waiting.length) app.appendChild(el("div","empty","Nothing to approve."));
+  else { var l=el("div","list");
+    waiting.forEach(function(r){
+      var c=cardFor(r,"waiting","Approve?");
+      var s=el("div","sub");
+      s.appendChild(document.createTextNode((r.klass||"class")+" · "));
+      s.appendChild(el("b",null,r.originalCoach||"unassigned"));
+      s.appendChild(el("span","arrow","→"));
+      s.appendChild(el("b",null,r.claimedBy||"?"));
+      var h=hoursUntil(r);
+      if(h<48&&h>-2){ s.appendChild(document.createTextNode(" · "));
+        s.appendChild(el("span","soon",h<0?"starting now":"in "+Math.max(1,Math.round(h))+"h")); }
+      c.appendChild(s);
+      var a=el("div","acts");
+      var ok=el("button","btn primary",S.busy===r.id?"…":"Approve");
+      ok.disabled=S.busy===r.id;
+      ok.addEventListener("click",function(){ doDecide(r,true); });
+      var no=el("button","btn","Send back");
+      no.addEventListener("click",function(){ doDecide(r,false); });
+      a.appendChild(ok); a.appendChild(no); c.appendChild(a);
+      l.appendChild(c);
+    });
+    app.appendChild(l);
+  }
+
+  if(approved.length){
+    app.appendChild(el("h2",null,"Approved — change these in Arbox ("+approved.length+")"));
+    var l2=el("div","list");
+    approved.forEach(function(r){
+      var c=cardFor(r,"mine","To do in Arbox");
+      var s=el("div","sub");
+      s.appendChild(document.createTextNode((r.klass||"class")+" · "));
+      s.appendChild(el("b",null,r.originalCoach||"unassigned"));
+      s.appendChild(el("span","arrow","→"));
+      s.appendChild(el("b",null,r.claimedBy||"?"));
+      c.appendChild(s);
+      l2.appendChild(c);
+    });
+    app.appendChild(l2);
+    var a2=el("div","acts");
+    var cp=el("button","btn","Copy the change list");
+    cp.addEventListener("click",function(){ copyChanges(approved.concat(bad)); });
+    a2.appendChild(cp); app.appendChild(a2);
+  }
+
+  if(bad.length){
+    app.appendChild(el("h2",null,"Still wrong in Arbox ("+bad.length+")"));
+    var l3=el("div","list");
+    bad.forEach(function(r){
+      var c=cardFor(r,"bad","Not updated");
+      var s=el("div","sub");
+      s.appendChild(document.createTextNode("Arbox says "));
+      s.appendChild(el("b",null,r.checkedCoach||"the original coach"));
+      s.appendChild(document.createTextNode(", but "));
+      s.appendChild(el("b",null,r.claimedBy||"someone else"));
+      s.appendChild(document.createTextNode(" is covering."));
+      c.appendChild(s);
+      l3.appendChild(c);
+    });
+    app.appendChild(l3);
+  }
+
+  if(open.length){
+    app.appendChild(el("h2",null,"Still needs a coach ("+open.length+")"));
+    var l4=el("div","list");
+    open.forEach(function(r){
+      var c=cardFor(r,"open","Nobody yet");
+      var s=el("div","sub");
+      s.appendChild(document.createTextNode((r.klass||"class")+" · asked by "));
+      s.appendChild(el("b",null,r.createdBy||r.originalCoach||"someone"));
+      c.appendChild(s);
+      l4.appendChild(c);
+    });
+    app.appendChild(l4);
+  }
+
+  if(done.length) app.appendChild(el("p","foot",done.length+" swap"+(done.length===1?"":"s")+" confirmed in Arbox."));
 }
 
-function askedCard(r){
-  var c = baseCard(r, r.status === "verified" ? "mine" : "waiting",
-                   r.status === "verified" ? "Sorted" : "Covered");
-  var sub = el("div", "sub");
-  sub.appendChild(document.createTextNode((r.klass || "class") + " · "));
-  sub.appendChild(el("b", null, r.claimedBy || "someone"));
-  sub.appendChild(document.createTextNode(" is taking it"));
-  c.appendChild(sub);
-  return c;
+function copyChanges(rs){
+  var lines=["Please update the coach on these classes:",""];
+  rs.slice().sort(function(a,b){ return (a.date+a.time).localeCompare(b.date+b.time); })
+    .forEach(function(r){
+      lines.push("• "+when(r)+" — "+(r.klass||"class")+" @ "+r.box);
+      lines.push("    "+(r.originalCoach||"unassigned")+"  ->  "+(r.claimedBy||"TBC"));
+    });
+  lines.push(""); lines.push("All approved. Flagging because the hours need to land on the coach who actually taught.");
+  var txt=lines.join("\n");
+  function fb(){ var ta=document.createElement("textarea"); ta.value=txt;
+    ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta);
+    ta.select(); var ok=false; try{ok=document.execCommand("copy");}catch(e){}
+    ta.remove(); toast(ok?"Copied":"Couldn't copy"); }
+  if(navigator.clipboard&&navigator.clipboard.writeText)
+    navigator.clipboard.writeText(txt).then(function(){toast("Copied");},fb);
+  else fb();
 }
 
-function myShiftCard(s){
-  var c = baseCard(s, "", null);
-  c.appendChild(el("div", "sub", s.klass || "class"));
-  var acts = el("div", "acts");
-  var b = el("button", "btn", S.busy === s.key ? "…" : "I need cover for this");
-  b.disabled = S.busy === s.key;
-  b.addEventListener("click", function(){ doRaise(s); });
-  acts.appendChild(b);
-  c.appendChild(acts);
-  return c;
-}
-
-/* ------------------------------------------------------------------ actions */
+/* ------------------------------------------------------------- actions */
 function doClaim(r){
-  S.busy = r.id; render();
-  rpc("claim_cover", { p_token: TOKEN, p_request: r.id, p_coach: ME }).then(function(res){
-    S.busy = null;
-    if (res && res.ok) {
-      toast(res.clash ? "Taken — but you're already on at another box then. Check it." : "Yours. Thanks.");
-    } else if (res && res.error === "taken") {
-      toast((res.takenBy || "Someone") + " got there first.");
-    } else {
-      toast("Couldn't take it — try again.");
-    }
+  S.busy=r.id; render();
+  rpc("claim_cover",{p_token:TOKEN,p_request:r.id,p_coach:ME}).then(function(res){
+    S.busy=null;
+    if(res&&res.ok) toast(res.clash?"Taken — but you're already on at another box then. Check it.":"Yours. Waiting for approval.");
+    else if(res&&res.error==="taken") toast((res.takenBy||"Someone")+" got there first.");
+    else toast("Couldn't take it — try again.");
     return load();
-  }).catch(function(){ S.busy = null; toast("Couldn't reach the board."); render(); });
+  }).catch(function(){ S.busy=null; toast("Couldn't reach the board."); render(); });
 }
 function doRelease(r){
-  S.busy = r.id; render();
-  rpc("release_cover", { p_token: TOKEN, p_request: r.id, p_coach: ME }).then(function(res){
-    S.busy = null;
-    toast(res && res.ok ? "Put back on the board." : "Too late to undo — tell the coach directly.");
+  S.busy=r.id; render();
+  rpc("release_cover",{p_token:TOKEN,p_request:r.id,p_coach:ME}).then(function(res){
+    S.busy=null; toast(res&&res.ok?"Put back on the board.":"Too late to undo — tell the coach directly.");
     return load();
-  }).catch(function(){ S.busy = null; toast("Couldn't reach the board."); render(); });
+  }).catch(function(){ S.busy=null; toast("Couldn't reach the board."); render(); });
 }
 function doRaise(s){
-  S.busy = s.key; render();
-  rpc("raise_cover", { p_token: TOKEN, p_key: s.key, p_coach: ME }).then(function(res){
-    S.busy = null;
-    toast(res && res.ok ? "Asked. The others can see it now." : "Already on the board.");
+  S.busy=s.key; render();
+  rpc("raise_cover",{p_token:TOKEN,p_key:s.key,p_coach:ME}).then(function(res){
+    S.busy=null; toast(res&&res.ok?"Asked. The others can see it now.":"Already on the board.");
     return load();
-  }).catch(function(){ S.busy = null; toast("Couldn't reach the board."); render(); });
+  }).catch(function(){ S.busy=null; toast("Couldn't reach the board."); render(); });
+}
+function doDecide(r,approve){
+  var note="";
+  if(!approve){ note=window.prompt("Send back to the board. Why? (optional)")||""; }
+  S.busy=r.id; render();
+  rpc("decide_cover",{p_token:TOKEN,p_request:r.id,p_approve:approve,p_who:ME,p_note:note})
+  .then(function(res){
+    S.busy=null;
+    if(res&&res.ok) toast(approve?"Approved. Now change it in Arbox.":"Sent back to the board.");
+    else if(res&&res.error==="not_approver") toast("Your link can't approve.");
+    else toast("Already handled by someone else.");
+    return load();
+  }).catch(function(){ S.busy=null; toast("Couldn't reach the board."); render(); });
 }
 
-/* ------------------------------------------------------------------ boot */
-render();
-load();
-setInterval(function(){ if (!document.hidden && !S.busy) load(); }, 20000);
-document.addEventListener("visibilitychange", function(){ if (!document.hidden) load(); });
+render(); load();
+setInterval(function(){ if(!document.hidden && !S.busy) load(); },20000);
+document.addEventListener("visibilitychange",function(){ if(!document.hidden) load(); });
 </script>
 </body>
 </html>
