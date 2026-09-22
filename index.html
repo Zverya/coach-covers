@@ -830,7 +830,7 @@ function doDecide(r,approve){
 }
 
 render(); load();
-setInterval(function(){ if(!document.hidden && !S.busy) load(); },20000);
+setInterval(function(){ if(!document.hidden && !S.busy && ME && !S.editBoxes) load(); },20000);
 document.addEventListener("visibilitychange",function(){ if(!document.hidden) load(); });
 </script>
 </body>
