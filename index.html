@@ -62,10 +62,8 @@ body{
 /* ---------- header ---------- */
 .masthead{padding-block:22px 14px; display:flex; align-items:center; gap:12px}
 .masthead > div{flex:1 1 auto}
-/* the profile button lives in the page's top-right corner, outside the content column */
-body{position:relative}
-.profile{position:absolute; top:14px; right:14px; z-index:25}
-@media (max-width:760px){ .masthead{padding-right:50px} }
+/* the profile button sits at the right edge of the content column, level with the title */
+.profile{position:relative; flex:none; margin-left:auto; align-self:center; z-index:25}
 /* the day you tapped, lit on the week grid */
 .wk-head.sel{background:var(--accent-soft)}
 .wk-col.sel{background:var(--accent-soft)}
