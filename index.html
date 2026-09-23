@@ -997,7 +997,32 @@ function reqCard(r){
     b.appendChild(el("span",null," · "));
     b.appendChild(el("span","urgent", h<0 ? "starting now" : "in "+Math.max(1,Math.round(h))+"h"));
   }
+  var myClash = (r.status==="open" && ME && !canConfirm() && !isMine(r)) ? conflictFor(ME, r) : null;
+  if(myClash){
+    b.appendChild(el("span",null," · "));
+    b.appendChild(el("span","urgent","you're on at "+shortBox(myClash.box)+" then"));
+  }
   c.appendChild(b);
+
+  /* --- a coach taking it while already booked elsewhere: explain, then let them decide --- */
+  if(r._conflict && !r._claiming){
+    var cw=el("div","inline-warn");
+    var cws=el("span");
+    cws.innerHTML="<strong>You're already on at the same time</strong> — "
+      +esc(r._conflict.klass||"a class")+" at "+esc(shortBox(r._conflict.box))+", "+esc(when(r._conflict))
+      +". Taking this double-books you across boxes; the board records it either way, so only do it if you've sorted the other class.";
+    cw.appendChild(cws);
+    var cact=el("div","req-actions");
+    var anyway2=el("button","btn","Take it anyway"); anyway2.type="button";
+    anyway2.addEventListener("click",function(){ doClaim(r, ME); });
+    cact.appendChild(anyway2);
+    var leave=el("button","btn ghost","Leave it"); leave.type="button";
+    leave.addEventListener("click",function(){ r._conflict=null; r._pendingWho=null; render(); });
+    cact.appendChild(leave);
+    cw.appendChild(cact);
+    c.appendChild(cw);
+    return c;
+  }
 
   /* --- the "who took it" form (admins record on someone's behalf) --- */
   if(r._claiming){
