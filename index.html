@@ -1374,6 +1374,7 @@ function shiftsOn(ds){
   var list=(S.schedule.shifts||[]).filter(function(x){ return x.date===ds && coachMatch(x); });
   openForMe().forEach(function(r){   // plus the open covers you could pick up
     if(r.date!==ds) return;
+    if(conflictFor(ME, r)) return;     // not while you're teaching elsewhere — Covers still lists it, with the clash spelled out
     if(list.some(function(x){ return key(x)===r.k; })) return;
     list.push({k:r.k, date:r.date, time:r.time, box:r.box, klass:r.klass, coach:r.originalCoach, _open:true});
   });
