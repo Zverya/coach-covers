@@ -1327,9 +1327,19 @@ function shiftsOn(ds){
     if(list.some(function(x){ return key(x)===r.k; })) return;
     list.push({k:r.k, date:r.date, time:r.time, box:r.box, klass:r.klass, coach:r.originalCoach, _open:true});
   });
+  if(ME) S.requests.forEach(function(r){   // and the ones you have taken, until Arbox lists them under your name
+    if(r.date!==ds || r.claimedBy!==ME || r.status==="open" || r.status==="cancelled") return;
+    if(list.some(function(x){ return key(x)===r.k; })) return;
+    list.push({k:r.k, date:r.date, time:r.time, box:r.box, klass:r.klass, coach:r.originalCoach, _cover:true});
+  });
   return list.sort(function(a,b){ return normTime(a.time).localeCompare(normTime(b.time)); });
 }
-function markFor(x, r){ return x._open ? " open" : (r ? " s-"+r.status : ""); }
+function markFor(x, r){
+  if(x._open) return " open";
+  if(!r) return "";
+  if(r.status==="verified" && (x.coach||"").trim()===(r.claimedBy||"").trim()) return "";
+  return " s-"+r.status;
+}
 function renderMonth(){
   var sh=S.schedule.shifts||[];
   var today=new Date(); today.setHours(0,0,0,0);
@@ -1404,11 +1414,11 @@ function renderCalLegend(scope){
     k.appendChild(el("span",null, (canConfirm() ? b : shortBox(b))+(n?" · "+n:"")));
     lg.appendChild(k);
   });
-  var st={}; S.requests.forEach(function(r){ if(canConfirm() || (r.originalCoach||"").trim()===ME) st[r.status]=1; });
+  var st={}; S.requests.forEach(function(r){ if(canConfirm() || (r.originalCoach||"").trim()===ME || r.claimedBy===ME) st[r.status]=1; });
   function stateKey(color,label,struck){ var k=el("div","cal-key"); var sw=el("i"); sw.style.background=color; if(struck) sw.style.opacity=".5";
     k.appendChild(sw); k.appendChild(el("span",null,label)); lg.appendChild(k); }
   if(st.open) stateKey("var(--crit)","Needs cover");
-  if(st.claimed||st.sent) stateKey("var(--warn)","Cover taken — waiting on admin");
+  if(st.claimed||st.sent) stateKey("var(--warn)",canConfirm()?"Cover taken — waiting on you":"Cover taken — waiting on admin");
   if(st.mismatch) stateKey("var(--bad)","Not updated in the system");
   if(st.verified) stateKey("var(--ok)","Confirmed",true);
   if(openForMe().length){
