@@ -729,10 +729,10 @@ function doConfirm(r,undo){
 function doCancel(r){
   S.busy=r.id; render();
   rpc("cancel_cover",{p_token:TOKEN,p_request:r.id,p_coach:WHO()}).then(function(res){
-    S.busy=null; toast(res&&res.ok?"Removed from the board.":"Couldn't remove it — someone may have taken it.");
+    S.busy=null; toast(res&&res.ok?"Request cancelled.":"Too late — someone has already taken it.");
     return load();
   }).catch(function(e){ S.busy=null;
-    toast(e&&e.message==="missing_rpc" ? "Remove isn't switched on yet — run migrate-cancel.sql in Supabase." : "Couldn't reach the board.");
+    toast(e&&e.message==="missing_rpc" ? "Cancelling isn't switched on yet — run migrate-cancel.sql in Supabase." : "Couldn't reach the board.");
     render(); });
 }
 function resolveBox(id,status){
@@ -1011,12 +1011,12 @@ function reqCard(r){
   /* --- remove confirmation, shown in place of the buttons --- */
   if(r._confirmRemove){
     var rm=el("div","inline-warn");
-    rm.appendChild(el("span",null,"Remove this cover request from the board? The class stays in your admin system either way."));
+    rm.appendChild(el("span",null,"Cancel this request? The class stays yours and nothing changes in Arbox."));
     var ract=el("div","req-actions");
-    var yes=el("button","btn","Remove it"); yes.type="button";
+    var yes=el("button","btn","Yes, cancel it"); yes.type="button";
     yes.addEventListener("click",function(){ r._confirmRemove=false; doCancel(r); });
     ract.appendChild(yes);
-    var keep=el("button","btn ghost","Keep it"); keep.type="button";
+    var keep=el("button","btn ghost","Keep asking"); keep.type="button";
     keep.addEventListener("click",function(){ r._confirmRemove=false; render(); });
     ract.appendChild(keep);
     rm.appendChild(ract);
@@ -1050,8 +1050,8 @@ function reqCard(r){
       else btn("Not actually done","ghost",function(){ doConfirm(r,true); });
     }
   }
-  if(r.status==="open" && (isMine(r) || canConfirm())){
-    btn("Remove","ghost",function(){ r._confirmRemove=true; render(); });
+  if(r.status==="open" && (isMine(r) || canConfirm())){   // only until somebody picks it up
+    btn("Cancel request","ghost",function(){ r._confirmRemove=true; render(); });
   }
   if(act.childNodes.length) c.appendChild(act);
   return c;
