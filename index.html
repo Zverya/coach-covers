@@ -954,13 +954,14 @@ function renderBoard(){
   boxList().forEach(function(box){
     var group=list.filter(function(r){ return (r.box||"").trim()===box; });
     if(!group.length) return;
-    var open=group.filter(function(r){ return r.status==="open"; });
     var hd=el("div","boxhead");
     hd.appendChild(el("h3",null,shortBox(box)));
     hd.appendChild(el("span","n", group.length+" "+(group.length===1?"class":"classes")));
-    if(open.length){
+    // WhatsApp text for this chip: a call for cover, or a nudge that the swap still needs doing
+    var wa = canConfirm() ? (S.filter==="open") : (S.filter==="open"||S.filter==="pending"||S.filter==="mismatch");
+    if(wa){
       var cp=el("button","btn","Copy for WhatsApp"); cp.type="button";
-      cp.addEventListener("click",function(){ copyText(groupMessage(open, box)); });
+      cp.addEventListener("click",function(){ copyText(S.filter==="open" ? groupMessage(group, box) : adminMessage(group)); });
       hd.appendChild(cp);
     }
     w.appendChild(hd);
