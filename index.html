@@ -1041,10 +1041,8 @@ function reqCard(r){
   if(r.status==="claimed"){
     if(canConfirm()) btn("Updated in Arbox","primary",function(){ doConfirm(r,false); });
     if(r.claimedBy===ME) btn("Undo claim",null,function(){ doRelease(r); });
-    if(!canConfirm()) btn("Copy for the box admin",null,function(){ copyText(adminMessage([r])); });
   }
   if(r.status==="sent"||r.status==="mismatch"){
-    if(!canConfirm()) btn("Copy for the box admin",null,function(){ copyText(adminMessage([r])); });
     if(canConfirm()){
       if(r.status==="mismatch") btn("Fixed it — updated now","primary",function(){ doConfirm(r,false); });
       else btn("Not actually done","ghost",function(){ doConfirm(r,true); });
@@ -1056,18 +1054,7 @@ function reqCard(r){
   if(act.childNodes.length) c.appendChild(act);
   return c;
 }
-function renderBoardTools(){
-  var w=$("boardtools"); w.innerHTML="";
-  var pend=S.requests.filter(function(r){ return r.status==="claimed"||r.status==="sent"||r.status==="mismatch"; });
-  if(!pend.length || canConfirm()) return;
-  var hr=el("hr","sep"); w.appendChild(hr);
-  var row=el("div","row tight");
-  var b2=el("button","btn","Copy change list for the box admin ("+pend.length+")"); b2.type="button";
-  b2.addEventListener("click",function(){ copyText(adminMessage(pend)); });
-  row.appendChild(b2);
-  w.appendChild(row);
-  w.appendChild(el("p","foot","Send this to the box admin, who moves the classes in Arbox. The nightly check confirms it once they say it's done."));
-}
+function renderBoardTools(){ $("boardtools").innerHTML=""; }
 
 /* ---------- message builders ---------- */
 function groupMessage(rs, box){
