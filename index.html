@@ -367,6 +367,7 @@ hr.sep{border:0; border-top:1px solid var(--line); margin-block:22px}
 .wk-row.s-mismatch i,.cal-dot.s-mismatch{background:var(--bad)!important}
 .wk-row.s-verified{opacity:.6}
 .alert.ok{background:var(--ok-bg); color:var(--ok)}
+.foot a{color:var(--ink-2)}
 .alert .dismiss{margin-left:auto; appearance:none; border:0; background:transparent; color:inherit;
   font:inherit; font-size:12px; text-decoration:underline; cursor:pointer; flex:none; padding:0}
 .boxhead{display:flex; align-items:center; gap:10px; margin:18px 0 8px}
@@ -397,7 +398,6 @@ hr.sep{border:0; border-top:1px solid var(--line); margin-block:22px}
     <button class="tab" role="tab" id="tab-cal"   aria-selected="true"  data-tab="cal">Schedule</button>
     <button class="tab" role="tab" id="tab-board" aria-selected="false" data-tab="board">Covers</button>
     <button class="tab" role="tab" id="tab-admin" aria-selected="false" data-tab="admin" hidden>To update</button>
-    <button class="tab" role="tab" id="tab-log"   aria-selected="false" data-tab="log">Record</button>
   </div>
 
   <!-- ============ BOARD ============ -->
@@ -467,6 +467,9 @@ hr.sep{border:0; border-top:1px solid var(--line); margin-block:22px}
 
   <!-- ============ RECORD ============ -->
   <section id="panel-log" hidden>
+    <div class="row tight" style="margin-bottom:14px">
+      <button class="btn ghost" id="btn-backlog" type="button">&larr; Back to schedule</button>
+    </div>
     <div class="panel-head">
       <h2>Who actually taught what</h2>
       <p>Every cover this board has handled, with the state of the official schedule at the last check. Copy it into your payroll thread or a spreadsheet.</p>
@@ -474,7 +477,7 @@ hr.sep{border:0; border-top:1px solid var(--line); margin-block:22px}
     <div id="logout"></div>
   </section>
 
-  <p class="foot" id="footnote"></p>
+  <p class="foot"><span id="footnote"></span> <a href="#" id="lnk-log">Record — who actually taught what</a></p>
 </div>
 <datalist id="coachlist"></datalist>
 
@@ -658,7 +661,7 @@ function doClaim(r, who){
   S.busy=r.id; render();
   rpc("claim_cover",{p_token:TOKEN,p_request:r.id,p_coach:who}).then(function(res){
     S.busy=null;
-    if(res&&res.ok) toast(res.clash ? who+" is already on at another box then — recorded anyway, check it." : (who===ME ? "Yours. Tell "+firstName(r.originalCoach)+" — there's a WhatsApp button on the card." : "Recorded for "+who+"."));
+    if(res&&res.ok) toast(res.clash ? who+" is already on at another box then — recorded anyway, check it." : (who===ME ? "Yours. The box admin will update Arbox." : "Recorded for "+who+"."));
     else if(res&&res.error==="taken") toast((res.takenBy||"Someone")+" already took this one");
     else toast("Couldn't take it — try again.");
     return load();
@@ -753,13 +756,6 @@ function takenNews(){
   }).sort(sortByTime);
 }
 function newsLine(r){ return r.claimedBy+" took your "+when(r)+" "+(r.klass||"class")+" at "+shortBox(r.box); }
-function firstName(n){ return String(n||"").trim().split(/\s+/)[0]||"them"; }
-/* The taker tells the coach directly — no phone numbers stored, WhatsApp asks whom to send it to. */
-function tellOnWhatsApp(r){
-  var msg="Hi "+firstName(r.originalCoach)+", I've taken your "+when(r)+" "+(r.klass||"class")+" at "+shortBox(r.box)
-         +" on the cover board. The box admin still needs to move it in Arbox.";
-  window.open("https://wa.me/?text="+encodeURIComponent(msg),"_blank","noopener");
-}
 function askNotify(){
   if(!("Notification" in window) || Notification.permission!=="default") return;
   Notification.requestPermission().catch(function(){});
@@ -1019,7 +1015,6 @@ function reqCard(r){
   }
   if(r.status==="claimed"){
     if(canConfirm()) btn("Updated in Arbox","primary",function(){ doConfirm(r,false); });
-    if(r.claimedBy===ME) btn("Tell "+firstName(r.originalCoach)+" on WhatsApp","primary",function(){ tellOnWhatsApp(r); });
     if(r.claimedBy===ME) btn("Undo claim",null,function(){ doRelease(r); });
     btn("Copy for admin",null,function(){ copyText(adminMessage([r])); });
   }
@@ -1555,7 +1550,7 @@ function setTab(name){
     var pan=$("panel-"+t); if(pan) pan.hidden=(t!==name);
     var btn=$("tab-"+t);   if(btn) btn.setAttribute("aria-selected", t===name ? "true":"false");
   });
-  if(name!=="pick"){ try{ localStorage.setItem("coach-tab",name); }catch(e){} }
+  if(name!=="pick" && name!=="log"){ try{ localStorage.setItem("coach-tab",name); }catch(e){} }
   if(name==="board") renderBoard();
   if(name==="cal") renderCal();
   if(name==="pick") renderPick();
@@ -1690,6 +1685,8 @@ function boot(){
   }
   $("btn-manual").addEventListener("click",function(){ setTab("pick"); });
   $("btn-backcal").addEventListener("click",function(){ setTab("cal"); });
+  $("btn-backlog").addEventListener("click",function(){ setTab("cal"); });
+  $("lnk-log").addEventListener("click",function(ev){ ev.preventDefault(); S.userPickedTab=true; setTab("log"); window.scrollTo(0,0); });
   $("cal-prev").addEventListener("click",function(){
     if(S.calView==="week"){ shiftWeek(-1); }
     else { S.calM--; if(S.calM<0){ S.calM=11; S.calY--; } }
