@@ -197,6 +197,9 @@ function when(r){ var d=new Date(r.date+"T00:00:00");
 function hoursUntil(r){ var d=new Date(r.date+"T"+hm(r.time)+":00");
   return isNaN(d.getTime())?Infinity:(d.getTime()-Date.now())/3600000; }
 function isAdmin(){ return S.data && S.data.role==="admin"; }
+function isBoxAdmin(){ return S.data && S.data.role==="box_admin"; }
+function canConfirm(){ return isAdmin() || isBoxAdmin(); }
+function adminBox(){ return (S.data && S.data.adminBox) || null; }
 
 function boxes(){ var seen={},o=[]; ((S.data&&S.data.shifts)||[]).forEach(function(s){
   var b=(s.box||"").trim(); if(b&&!seen[b]){seen[b]=1;o.push(b);} }); return o.sort(); }
@@ -223,7 +226,7 @@ function syncExtras(){
     }).catch(function(){}));
   }
   // approver: pending box requests
-  if(S.data && S.data.role==="admin"){
+  if(isAdmin()){
     jobs.push(rpc("pending_boxes",{p_token:TOKEN}).then(function(r){
       S.boxReqs = (r&&r.ok&&r.boxes)?r.boxes:[];
     }).catch(function(){ S.boxReqs=[]; }));
@@ -249,7 +252,8 @@ function render(){
 
   var head=el("header");
   head.appendChild(el("h1",null,(d.board&&d.board.name)||"Coach Covers"));
-  if(isAdmin()) head.appendChild(el("span","rolechip","Approver"));
+  if(isAdmin()) head.appendChild(el("span","rolechip","All boxes"));
+  else if(isBoxAdmin()) head.appendChild(el("span","rolechip", shortBox(adminBox()||"Box")+" admin"));
   var who=el("div","who");
   who.appendChild(document.createTextNode(ME+" · "));
   var sw=el("button",null,"not you?");
@@ -279,11 +283,14 @@ function render(){
   }
   tb("schedule","My week",0);
   tb("covers","Covers",openN);
-  if(isAdmin()) tb("approvals","Approvals",waiting.length);
+  if(canConfirm()){
+    var todo=reqs.filter(function(r){ return r.status==="claimed"||r.status==="mismatch"; }).length;
+    tb("approvals","To update",todo);
+  }
   app.appendChild(tabs);
 
   if(S.tab==="schedule") renderSchedule(app,d);
-  else if(S.tab==="approvals" && isAdmin()) renderApprovals(app,d);
+  else if(S.tab==="approvals" && canConfirm()) renderApprovals(app,d);
   else renderCovers(app,d);
 }
 
@@ -458,10 +465,10 @@ function renderSchedule(app,d){
     if(e.kind==="take"){ doClaim(e.r); return; }
     if(e.kind==="cover"){
       if(e.r.status==="claimed") doRelease(e.r);
-      else toast(e.r.status==="verified" ? "Confirmed in Arbox." : "You're covering this \u2014 approved.");
+      else toast(e.r.status==="verified" ? "Confirmed in Arbox." : "You're covering this \u2014 the box admin is updating Arbox.");
       return;
     }
-    if(e.st==="await"){ toast(e.r && e.r.claimedBy ? (e.r.claimedBy+" is taking it \u2014 awaiting approval") : "On the board \u2014 nobody has taken it yet"); return; }
+    if(e.st==="await"){ toast(e.r && e.r.claimedBy ? (e.r.claimedBy+" is taking it \u2014 pending Arbox update") : "On the board \u2014 nobody has taken it yet"); return; }
     if(e.st==="handed"){ toast((e.r&&e.r.claimedBy?e.r.claimedBy:"Someone")+" is covering"+(e.r&&e.r.status==="verified"?", confirmed in Arbox":"")); return; }
     doRaise(e.s); // my class, not yet on the board
   }
@@ -573,7 +580,7 @@ function renderSchedule(app,d){
   var tk=el("div","key"); var ti=el("i"); ti.style.background="var(--ok-bg)"; ti.style.border="1.5px dashed var(--ok)"; tk.appendChild(ti); tk.appendChild(el("span",null,"Free to pick up")); lg.appendChild(tk);
   app.appendChild(lg);
 
-  app.appendChild(el("p","foot","Tap your class to ask for cover. Tap a green dashed slot to pick up a shift someone needs covered. It only counts once an approver signs it off and Arbox is updated."));
+  app.appendChild(el("p","foot","Tap your class to ask for cover. Tap a green dashed slot to pick up a shift someone needs covered. The box admin then updates Arbox, and a nightly check confirms it."));
 }
 
 /* -------------------------------------------------------------- covers */
@@ -614,7 +621,7 @@ function renderCovers(app,d){
     var l2=el("div","list");
     mine.forEach(function(r){
       var cls = r.status==="verified" ? "done" : (r.status==="claimed" ? "waiting" : (r.status==="mismatch"?"bad":"mine"));
-      var pill = r.status==="claimed" ? "Waiting for approval"
+      var pill = r.status==="claimed" ? "Pending Arbox update"
                : r.status==="approved" ? "Approved"
                : r.status==="verified" ? "Confirmed"
                : r.status==="mismatch" ? "Not in Arbox yet" : r.status;
@@ -640,7 +647,7 @@ function renderCovers(app,d){
     var l3=el("div","list");
     asked.forEach(function(r){
       var cls = r.status==="verified" ? "done" : (r.status==="claimed"?"waiting":"mine");
-      var pill = r.status==="claimed" ? "Awaiting approval"
+      var pill = r.status==="claimed" ? "Covered"
                : r.status==="approved" ? "Approved"
                : r.status==="verified" ? "Sorted" : r.status;
       var c=cardFor(r,cls,pill);
@@ -655,14 +662,14 @@ function renderCovers(app,d){
   }
 
   app.appendChild(el("p","foot","Taking a shift is a commitment — the coach who asked stops looking. "
-    +"It only counts for pay once an approver signs it off and it changes in Arbox."));
+    +"The box admin then changes it in Arbox, and a nightly check confirms it landed."));
 }
 
 /* ----------------------------------------------------------- approvals */
 function renderApprovals(app,d){
   var reqs=d.requests||[];
   // pending box requests from coaches
-  var boxReqs=S.boxReqs||[];
+  var boxReqs=isAdmin()?(S.boxReqs||[]):[];
   if(boxReqs.length){
     app.appendChild(el("h2",null,"New boxes requested ("+boxReqs.length+")"));
     var bl=el("div","list");
@@ -696,55 +703,57 @@ function renderApprovals(app,d){
 
   if(bad.length){
     var n=el("div","note bad");
-    n.textContent=bad.length+" approved "+(bad.length===1?"swap has":"swaps have")
-      +" not been changed in Arbox yet. Until that happens the original coach gets paid.";
+    n.textContent=bad.length+" "+(bad.length===1?"swap was":"swaps were")
+      +" marked updated, but the nightly check still finds the original coach in Arbox. "
+      +"Until that's fixed the wrong person gets paid.";
     app.appendChild(n);
   }
 
-  app.appendChild(el("h2",null,waiting.length?("Waiting for you ("+waiting.length+")"):"Waiting for you"));
-  if(!waiting.length) app.appendChild(el("div","empty","Nothing to approve."));
+  function swapLine(r){
+    var s=el("div","sub");
+    s.appendChild(document.createTextNode((r.klass||"class")+" · "));
+    s.appendChild(el("b",null,r.originalCoach||"unassigned"));
+    s.appendChild(el("span","arrow","→"));
+    s.appendChild(el("b",null,r.claimedBy||"?"));
+    var h=hoursUntil(r);
+    if(h<48&&h>-2){ s.appendChild(document.createTextNode(" · "));
+      s.appendChild(el("span","soon",h<0?"starting now":"in "+Math.max(1,Math.round(h))+"h")); }
+    return s;
+  }
+
+  app.appendChild(el("h2",null,waiting.length?("Change these in Arbox ("+waiting.length+")"):"Change these in Arbox"));
+  if(!waiting.length) app.appendChild(el("div","empty","Nothing waiting on you."));
   else { var l=el("div","list");
     waiting.forEach(function(r){
-      var c=cardFor(r,"waiting","Approve?");
-      var s=el("div","sub");
-      s.appendChild(document.createTextNode((r.klass||"class")+" · "));
-      s.appendChild(el("b",null,r.originalCoach||"unassigned"));
-      s.appendChild(el("span","arrow","→"));
-      s.appendChild(el("b",null,r.claimedBy||"?"));
-      var h=hoursUntil(r);
-      if(h<48&&h>-2){ s.appendChild(document.createTextNode(" · "));
-        s.appendChild(el("span","soon",h<0?"starting now":"in "+Math.max(1,Math.round(h))+"h")); }
-      c.appendChild(s);
+      var c=cardFor(r,"waiting","Update Arbox");
+      c.appendChild(swapLine(r));
       var a=el("div","acts");
-      var ok=el("button","btn primary",S.busy===r.id?"…":"Approve");
+      var ok=el("button","btn primary",S.busy===r.id?"…":"I've updated Arbox");
       ok.disabled=S.busy===r.id;
-      ok.addEventListener("click",function(){ doDecide(r,true); });
-      var no=el("button","btn","Send back");
-      no.addEventListener("click",function(){ doDecide(r,false); });
-      a.appendChild(ok); a.appendChild(no); c.appendChild(a);
+      ok.addEventListener("click",function(){ doConfirm(r,false); });
+      a.appendChild(ok); c.appendChild(a);
       l.appendChild(c);
     });
     app.appendChild(l);
+    var a1=el("div","acts");
+    var cp1=el("button","btn","Copy the change list");
+    cp1.addEventListener("click",function(){ copyChanges(waiting.concat(bad)); });
+    a1.appendChild(cp1); app.appendChild(a1);
   }
 
   if(approved.length){
-    app.appendChild(el("h2",null,"Approved — change these in Arbox ("+approved.length+")"));
+    app.appendChild(el("h2",null,"Marked done — awaiting tonight's check ("+approved.length+")"));
     var l2=el("div","list");
     approved.forEach(function(r){
-      var c=cardFor(r,"mine","To do in Arbox");
-      var s=el("div","sub");
-      s.appendChild(document.createTextNode((r.klass||"class")+" · "));
-      s.appendChild(el("b",null,r.originalCoach||"unassigned"));
-      s.appendChild(el("span","arrow","→"));
-      s.appendChild(el("b",null,r.claimedBy||"?"));
-      c.appendChild(s);
+      var c=cardFor(r,"mine","Marked done");
+      c.appendChild(swapLine(r));
+      var a=el("div","acts");
+      var un=el("button","btn ghost","Not actually done");
+      un.addEventListener("click",function(){ doConfirm(r,true); });
+      a.appendChild(un); c.appendChild(a);
       l2.appendChild(c);
     });
     app.appendChild(l2);
-    var a2=el("div","acts");
-    var cp=el("button","btn","Copy the change list");
-    cp.addEventListener("click",function(){ copyChanges(approved.concat(bad)); });
-    a2.appendChild(cp); app.appendChild(a2);
   }
 
   if(bad.length){
@@ -759,6 +768,10 @@ function renderApprovals(app,d){
       s.appendChild(el("b",null,r.claimedBy||"someone else"));
       s.appendChild(document.createTextNode(" is covering."));
       c.appendChild(s);
+      var a3=el("div","acts");
+      var fix=el("button","btn primary","Fixed it \u2014 updated now");
+      fix.addEventListener("click",function(){ doConfirm(r,false); });
+      a3.appendChild(fix); c.appendChild(a3);
       l3.appendChild(c);
     });
     app.appendChild(l3);
@@ -804,7 +817,7 @@ function doClaim(r){
   S.busy=r.id; render();
   rpc("claim_cover",{p_token:TOKEN,p_request:r.id,p_coach:ME}).then(function(res){
     S.busy=null;
-    if(res&&res.ok) toast(res.clash?"Taken — but you're already on at another box then. Check it.":"Yours. Waiting for approval.");
+    if(res&&res.ok) toast(res.clash?"Taken — but you're already on at another box then. Check it.":"Yours. The box admin will update Arbox.");
     else if(res&&res.error==="taken") toast((res.takenBy||"Someone")+" got there first.");
     else toast("Couldn't take it — try again.");
     return load();
@@ -831,16 +844,14 @@ function resolveBox(id,status){
     render();
   }).catch(function(){ toast("Couldn't reach the board."); });
 }
-function doDecide(r,approve){
-  var note="";
-  if(!approve){ note=window.prompt("Send back to the board. Why? (optional)")||""; }
+function doConfirm(r,undo){
   S.busy=r.id; render();
-  rpc("decide_cover",{p_token:TOKEN,p_request:r.id,p_approve:approve,p_who:ME,p_note:note})
+  rpc("confirm_updated",{p_token:TOKEN,p_request:r.id,p_undo:!!undo})
   .then(function(res){
     S.busy=null;
-    if(res&&res.ok) toast(approve?"Approved. Now change it in Arbox.":"Sent back to the board.");
-    else if(res&&res.error==="not_approver") toast("Your link can't approve.");
-    else toast("Already handled by someone else.");
+    if(res&&res.ok) toast(undo ? "Put back on your list." : "Marked done. Tonight's check will confirm it.");
+    else if(res&&res.error==="not_admin") toast("Your link can't do that.");
+    else toast("Already handled.");
     return load();
   }).catch(function(){ S.busy=null; toast("Couldn't reach the board."); render(); });
 }
