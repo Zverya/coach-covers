@@ -1579,6 +1579,13 @@ function renderWeek(){
   });
 
   renderCalLegend(inWeek);
+
+  // on a phone the grid scrolls sideways: start with today (or the selected day) in view
+  var wrap=$("wk-wrap"), focusDs=S.calDay||iso(today), fi=days.indexOf(focusDs);
+  if(wrap && fi>0 && wrap.scrollWidth>wrap.clientWidth){
+    var head=g.children[1+fi];
+    if(head) wrap.scrollLeft=Math.max(0, head.offsetLeft-46-6);
+  }
 }
 function renderCalDetail(){
   var w=$("cal-detail"); w.innerHTML="";
