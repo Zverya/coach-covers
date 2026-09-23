@@ -291,9 +291,15 @@ function boxes(){ var seen={},o=[]; ((S.data&&S.data.shifts)||[]).forEach(functi
   var b=(s.box||"").trim(); if(b&&!seen[b]){seen[b]=1;o.push(b);} }); return o.sort(); }
 /* The boxes you coach at take the first palette slots, so your own schedule
    reads in the same colours however many other gyms are on the board. */
+function myBoxesSeen(){ // where your own classes are, plus whatever you ticked
+  var o=[]; ((S.data&&S.data.shifts)||[]).forEach(function(s){
+    if(s.coach!==ME) return; var b=(s.box||"").trim(); if(b&&o.indexOf(b)<0) o.push(b); });
+  o.sort(); MYBOXES.forEach(function(b){ if(o.indexOf(b)<0) o.push(b); });
+  return o;
+}
 function paletteOrder(){
   var all=boxes(), o=[];
-  MYBOXES.forEach(function(b){ if(all.indexOf(b)>=0 && o.indexOf(b)<0) o.push(b); });
+  myBoxesSeen().forEach(function(b){ if(all.indexOf(b)>=0 && o.indexOf(b)<0) o.push(b); });
   all.forEach(function(b){ if(o.indexOf(b)<0) o.push(b); });
   return o;
 }
@@ -812,8 +818,10 @@ function renderSchedule(app,d){
   function key(color,label,dash){ var k=el("div","key"); var sw=el("i"); sw.style.background=color;
     if(dash) sw.style.border="1.5px dashed var(--ok)";
     k.appendChild(sw); k.appendChild(el("span",null,label)); lg.appendChild(k); }
-  paletteOrder().filter(function(b){ return !MYBOXES.length || MYBOXES.indexOf(b)>=0; })
-    .slice(0,6).forEach(function(b){ key(boxColor(b), shortBox(b)); });
+  var inView={}; Object.keys(EV).forEach(function(ds){ EV[ds].forEach(function(e){ if(e.kind==="mine"||e.kind==="other") inView[(e.box||"").trim()]=1; }); });
+  var shownBoxes=paletteOrder().filter(function(b){ return inView[b]; });
+  if(!shownBoxes.length) shownBoxes=paletteOrder().filter(function(b){ return myBoxesSeen().indexOf(b)>=0; });
+  shownBoxes.slice(0,6).forEach(function(b){ key(boxColor(b), shortBox(b)); });
   key("var(--warn)","Awaiting cover");
   if(!other){ key("var(--ok)","You're covering"); key("var(--ok-bg)","Free to pick up",true); }
   app.appendChild(lg);
