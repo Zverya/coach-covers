@@ -37,6 +37,34 @@ h1{font-family:Oswald,sans-serif; font-weight:600; font-size:23px; text-transfor
 .who{margin-left:auto; font-size:12px; color:var(--ink-2)}
 .who button{appearance:none;border:0;background:none;color:var(--accent);font:inherit;
   font-size:12px;cursor:pointer;text-decoration:underline;padding:0}
+.sub2{color:var(--ink-2);font-size:13px;margin:4px 0 0;max-width:60ch}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-block:4px 16px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:11px 12px;
+  box-shadow:var(--shadow);position:relative;overflow:hidden}
+.stat::before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:var(--ink-3)}
+.stat.c::before{background:var(--crit)} .stat.w::before{background:var(--warn)} .stat.o::before{background:var(--ok)}
+.stat b{font-family:Oswald,sans-serif;font-size:27px;font-weight:600;display:block;line-height:1;
+  font-variant-numeric:tabular-nums}
+.stat.c b{color:var(--crit)} .stat.w b{color:var(--warn)} .stat.o b{color:var(--ok)}
+.stat span{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-2);
+  display:block;margin-top:5px;font-weight:500}
+.alert{border-radius:10px;padding:11px 13px;font-size:13.5px;margin-bottom:14px;display:flex;
+  gap:10px;align-items:flex-start;line-height:1.45}
+.alert.bad{background:var(--bad-bg);color:var(--bad)}
+.alert.note2{background:var(--surface-2);color:var(--ink-2);border:1px solid var(--line)}
+.alert .ic{font-family:Oswald,sans-serif;font-weight:600;flex:none}
+.filters{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px}
+.fchip{appearance:none;cursor:pointer;border:1px solid var(--line);background:var(--surface);
+  color:var(--ink-2);font-family:inherit;font-size:12px;padding:5px 10px;border-radius:999px}
+.fchip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:transparent;font-weight:600}
+.tscroll{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:13px;min-width:460px}
+th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-2);
+  font-weight:600;padding:8px 10px;border-bottom:1px solid var(--line);background:var(--surface-2);white-space:nowrap}
+td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+td.mono{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
+@media (max-width:460px){.stats{grid-template-columns:1fr 1fr}.stat:first-child{grid-column:1/-1}}
 .rolechip{font-size:10px;text-transform:uppercase;letter-spacing:.07em;font-weight:600;
   padding:3px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent)}
 .tabs{display:flex;gap:2px;background:var(--surface-2);padding:3px;border-radius:10px;
@@ -169,7 +197,7 @@ var ME = null; try { ME = localStorage.getItem("coach-name"); } catch (e) {}
 var TAB = null; try { TAB = localStorage.getItem("coach-tab"); } catch (e) {}
 var MYBOXES = []; try { MYBOXES = JSON.parse(localStorage.getItem("coach-boxes")||"[]")||[]; } catch (e) { MYBOXES=[]; }
 
-var S = { loading:true, err:null, data:null, busy:null, tab:TAB||"schedule", weekStart:null };
+var S = { loading:true, err:null, data:null, busy:null, tab:TAB||"schedule", weekStart:null, cfilter:"all" };
 
 function $(s,r){ return (r||document).querySelector(s); }
 function el(t,c,x){ var n=document.createElement(t); if(c)n.className=c; if(x!=null)n.textContent=x; return n; }
@@ -251,7 +279,12 @@ function render(){
   if(S.editBoxes) return boxEditor(app,d);
 
   var head=el("header");
-  head.appendChild(el("h1",null,(d.board&&d.board.name)||"Coach Covers"));
+  var titleWrap=el("div"); titleWrap.style.minWidth="0";
+  titleWrap.appendChild(el("h1",null,(d.board&&d.board.name)||"Coach Covers"));
+  titleWrap.appendChild(el("p","sub2", canConfirm()
+    ? "Swaps at your box, whether Arbox was changed, and what the nightly check found."
+    : "Your week, the shifts you can pick up, and where your covers stand."));
+  head.appendChild(titleWrap);
   if(isAdmin()) head.appendChild(el("span","rolechip","All boxes"));
   else if(isBoxAdmin()) head.appendChild(el("span","rolechip", shortBox(adminBox()||"Box")+" admin"));
   var who=el("div","who");
@@ -268,8 +301,39 @@ function render(){
   app.appendChild(head);
 
   var reqs=d.requests||[];
-  var waiting=reqs.filter(function(r){ return r.status==="claimed"; });
   var openN=reqs.filter(function(r){ return r.status==="open"; }).length;
+
+  // --- stat tiles (scoped to this coach, or to the box for an admin) ---
+  var mineR=reqs.filter(function(r){ return r.claimedBy===ME||r.originalCoach===ME||r.createdBy===ME; });
+  var t1,t2,t3,l1,l2,l3,bad;
+  if(canConfirm()){
+    t1=openN; l1=t1===1?"class needs a coach":"classes need a coach";
+    t2=reqs.filter(function(r){ return r.status==="claimed"||r.status==="mismatch"; }).length; l2="to update in arbox";
+    t3=reqs.filter(function(r){ return r.status==="verified"; }).length; l3="confirmed in arbox";
+    bad=reqs.filter(function(r){ return r.status==="mismatch"; });
+  } else {
+    t1=reqs.filter(function(r){ return r.status==="open" && r.originalCoach!==ME && r.createdBy!==ME
+        && (!MYBOXES.length || MYBOXES.indexOf(r.box)>=0); }).length;
+    l1=t1===1?"shift you can pick up":"shifts you can pick up";
+    t2=mineR.filter(function(r){ return r.status==="claimed"||r.status==="approved"||r.status==="mismatch"; }).length;
+    l2="pending arbox update";
+    t3=mineR.filter(function(r){ return r.status==="verified"; }).length; l3="confirmed";
+    bad=mineR.filter(function(r){ return r.status==="mismatch"; });
+  }
+  var st=el("div","stats");
+  [["c",t1,l1],["w",t2,l2],["o",t3,l3]].forEach(function(x){
+    var t=el("div","stat "+x[0]); t.appendChild(el("b",null,String(x[1])));
+    t.appendChild(el("span",null,x[2])); st.appendChild(t);
+  });
+  app.appendChild(st);
+
+  if(bad.length){
+    var al=el("div","alert bad");
+    al.appendChild(el("span","ic","!"));
+    al.appendChild(el("span",null, bad.length+" "+(bad.length===1?"swap was":"swaps were")
+      +" marked done, but the nightly check still finds the original coach in Arbox \u2014 the wrong person gets paid until it's fixed."));
+    app.appendChild(al);
+  }
 
   var tabs=el("div","tabs");
   function tb(id,label,count){
@@ -281,16 +345,15 @@ function render(){
       try{localStorage.setItem("coach-tab",id);}catch(e){} render(); });
     tabs.appendChild(b);
   }
-  tb("schedule","My week",0);
+  tb("schedule","Schedule",0);
   tb("covers","Covers",openN);
-  if(canConfirm()){
-    var todo=reqs.filter(function(r){ return r.status==="claimed"||r.status==="mismatch"; }).length;
-    tb("approvals","To update",todo);
-  }
+  if(canConfirm()) tb("approvals","To update",t2);
+  tb("record","Record",0);
   app.appendChild(tabs);
 
   if(S.tab==="schedule") renderSchedule(app,d);
   else if(S.tab==="approvals" && canConfirm()) renderApprovals(app,d);
+  else if(S.tab==="record") renderRecord(app,d);
   else renderCovers(app,d);
 }
 
@@ -599,7 +662,40 @@ function renderCovers(app,d){
   var mine=reqs.filter(function(r){ return r.claimedBy===ME; });
   var asked=reqs.filter(function(r){ return r.createdBy===ME && r.status!=="open"; });
 
+  var F=S.cfilter||"all";
+  var chips=el("div","filters");
+  [["all","Everything"],["open","Needs a coach"],["covering","You're covering"],
+   ["asked","You asked"],["done","Confirmed"]].forEach(function(o){
+    var b=el("button","fchip",o[1]); b.type="button";
+    b.setAttribute("aria-pressed", F===o[0]?"true":"false");
+    b.addEventListener("click",function(){ S.cfilter=o[0]; render(); });
+    chips.appendChild(b);
+  });
+  app.appendChild(chips);
+
+  if(F==="done"){
+    var doneL=reqs.filter(function(r){ return r.status==="verified"
+      && (r.claimedBy===ME||r.createdBy===ME||r.originalCoach===ME); });
+    if(!doneL.length) app.appendChild(el("div","empty","Nothing confirmed yet."));
+    else { var dl=el("div","list");
+      doneL.forEach(function(r){
+        var c=cardFor(r,"done","Confirmed");
+        var sx=el("div","sub");
+        sx.appendChild(document.createTextNode((r.klass||"class")+" · "));
+        sx.appendChild(el("b",null,r.originalCoach||"someone"));
+        sx.appendChild(el("span","arrow","→"));
+        sx.appendChild(el("b",null,r.claimedBy||"?"));
+        c.appendChild(sx); dl.appendChild(c);
+      });
+      app.appendChild(dl);
+    }
+    app.appendChild(el("p","foot","Confirmed means the nightly check found the cover already in Arbox."));
+    return;
+  }
+
+  if(F==="all"||F==="open")
   app.appendChild(el("h2",null,open.length?("Needs a coach ("+open.length+")"):"Needs a coach"));
+  if(F==="all"||F==="open"){
   if(!open.length) app.appendChild(el("div","empty","Nothing open right now."));
   else { var l=el("div","list"); open.forEach(function(r){
     var c=cardFor(r,"open","Needs a coach");
@@ -614,9 +710,9 @@ function renderCovers(app,d){
     if(r.createdBy===ME) a.appendChild(el("span","sub","You asked for this one."));
     else { var b=el("button","btn primary",S.busy===r.id?"…":"I'll take it");
       b.disabled=S.busy===r.id; b.addEventListener("click",function(){ doClaim(r); }); a.appendChild(b); }
-    c.appendChild(a); l.appendChild(c); }); app.appendChild(l); }
+    c.appendChild(a); l.appendChild(c); }); app.appendChild(l); } }
 
-  if(mine.length){
+  if(mine.length && (F==="all"||F==="covering")){
     app.appendChild(el("h2",null,"You're covering ("+mine.length+")"));
     var l2=el("div","list");
     mine.forEach(function(r){
@@ -642,7 +738,7 @@ function renderCovers(app,d){
     app.appendChild(l2);
   }
 
-  if(asked.length){
+  if(asked.length && (F==="all"||F==="asked")){
     app.appendChild(el("h2",null,"You asked for cover"));
     var l3=el("div","list");
     asked.forEach(function(r){
@@ -666,6 +762,42 @@ function renderCovers(app,d){
 }
 
 /* ----------------------------------------------------------- approvals */
+function renderRecord(app,d){
+  var reqs=(d.requests||[]).filter(function(r){
+    return canConfirm() || r.claimedBy===ME || r.createdBy===ME || r.originalCoach===ME;
+  }).slice().sort(function(a,b){ return (a.date+a.time).localeCompare(b.date+b.time); });
+
+  app.appendChild(el("h2",null, canConfirm()?"Every swap at this box":"Your covers"));
+  if(!reqs.length){ app.appendChild(el("div","empty","Nothing recorded yet."));
+    app.appendChild(el("p","foot","This fills in as shifts get handed over and covered.")); return; }
+
+  var label={open:"Needs a coach",claimed:"Pending Arbox update",approved:"Marked done",
+             verified:"Confirmed in Arbox",mismatch:"Not updated"};
+  var sc=el("div","tscroll"), t=el("table");
+  var thead=el("thead"), htr=el("tr");
+  ["Date","Time","Box","Class","Booked","Covered by","Status"].forEach(function(h){ htr.appendChild(el("th",null,h)); });
+  thead.appendChild(htr); t.appendChild(thead);
+  var tb=el("tbody");
+  reqs.forEach(function(r){
+    var tr=el("tr");
+    tr.appendChild(el("td","mono",r.date));
+    tr.appendChild(el("td","mono",hm(r.time)));
+    tr.appendChild(el("td",null,shortBox(r.box)));
+    tr.appendChild(el("td",null,r.klass||"—"));
+    tr.appendChild(el("td",null,r.originalCoach||"—"));
+    tr.appendChild(el("td",null,r.claimedBy||"— nobody yet —"));
+    var td=el("td");
+    var cls = r.status==="verified"?"done":(r.status==="mismatch"?"bad":(r.status==="open"?"open":"waiting"));
+    var pill=el("span","pill "+cls,label[r.status]||r.status); pill.style.marginLeft="0";
+    td.appendChild(pill); tr.appendChild(td);
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb); sc.appendChild(t); app.appendChild(sc);
+  var pend=reqs.filter(function(r){ return r.claimedBy && r.status!=="verified"; }).length;
+  if(pend) app.appendChild(el("p","foot", pend+" "+(pend===1?"cover has":"covers have")
+    +" not been confirmed in Arbox yet \u2014 until they are, treat the 'covered by' column as the coaches' word, not the payroll record."));
+}
+
 function renderApprovals(app,d){
   var reqs=d.requests||[];
   // pending box requests from coaches
