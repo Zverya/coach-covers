@@ -589,7 +589,14 @@ function isAdmin(){ return S.data && S.data.role==="admin"; }
 function isBoxAdmin(){ return S.data && S.data.role==="box_admin"; }
 function canConfirm(){ return isAdmin() || isBoxAdmin(); }
 function adminBox(){ return (S.data && S.data.adminBox) || null; }
-function isMine(r){ return r.originalCoach===ME || r.createdBy===ME; }
+function isMine(r){ return !!ME && (r.originalCoach===ME || r.createdBy===ME); }
+function WHO(){ return ME || (isBoxAdmin() ? shortBox(adminBox()||"box")+" admin" : "admin"); }
+/* What this link is allowed to see on the calendar: your classes, or the box's. */
+function inScope(x){
+  if(isAdmin()) return true;
+  if(isBoxAdmin()) return (x.box||"").trim()===(adminBox()||"").trim();
+  return (x.coach||"").trim()===ME;
+}
 
 /* ============================ data ============================ */
 function rpc(fn,args){
@@ -619,7 +626,7 @@ function load(){
   return rpc("board_state",{p_token:TOKEN}).then(function(res){
     S.loading=false;
     if(!res||res.ok===false){ S.err=(res&&res.error)||"unknown"; }
-    else { S.err=null; applyState(res); announceNews(); }
+    else { S.err=null; applyState(res); if(canConfirm()) ME=null; announceNews(); }
     return syncExtras();
   }).then(function(){ renderAll(); })
   .catch(function(){ S.loading=false; S.err="network"; renderAll(); });
@@ -687,7 +694,7 @@ function doRelease(r){
 function doRaise(sh){
   askNotify();
   S.busy=key(sh); render();
-  rpc("raise_cover",{p_token:TOKEN,p_key:key(sh),p_coach:ME}).then(function(res){
+  rpc("raise_cover",{p_token:TOKEN,p_key:key(sh),p_coach:WHO()}).then(function(res){
     S.busy=null; toast(res&&res.ok?"Added to the board":"Already on the board.");
     return load();
   }).catch(fail);
@@ -702,7 +709,7 @@ function raiseMany(shifts){
       toast(done ? (done+" added to the board"+(dup?", "+dup+" already there":"")) : "Those are already on the board");
       return load().then(function(){ setTab("board"); });
     }
-    rpc("raise_cover",{p_token:TOKEN,p_key:key(shifts[i]),p_coach:ME})
+    rpc("raise_cover",{p_token:TOKEN,p_key:key(shifts[i]),p_coach:WHO()})
       .then(function(res){ if(res&&res.ok) done++; else dup++; next(i+1); })
       .catch(function(){ S.busy=null; toast("Couldn't reach the board — "+done+" added so far."); load(); });
   })(0);
@@ -719,7 +726,7 @@ function doConfirm(r,undo){
 }
 function doCancel(r){
   S.busy=r.id; render();
-  rpc("cancel_cover",{p_token:TOKEN,p_request:r.id,p_coach:ME}).then(function(res){
+  rpc("cancel_cover",{p_token:TOKEN,p_request:r.id,p_coach:WHO()}).then(function(res){
     S.busy=null; toast(res&&res.ok?"Removed from the board.":"Couldn't remove it — someone may have taken it.");
     return load();
   }).catch(function(e){ S.busy=null;
@@ -736,7 +743,7 @@ function resolveBox(id,status){
 
 /* Open covers this person could take: at the boxes they coach at, not their own. */
 function openForMe(){
-  if(canConfirm()) return S.requests.filter(function(r){ return r.status==="open"; });
+  if(canConfirm()) return [];   // an admin sees the box's classes themselves, not a "take it" layer
   var mine=myBoxesSeen();
   return S.requests.filter(function(r){
     if(r.status!=="open" || isMine(r)) return false;
@@ -797,7 +804,7 @@ function renderAll(){
   else if(S.err==="network"){ gate("Can't reach the board","Check your connection, then refresh."); }
   else if(S.err==="unknown_board"){ gate("This link doesn't work","The code isn't recognised. Ask for a fresh link."); }
   else if(S.err){ gate("Something went wrong","Try again in a moment."); }
-  else if(!ME){ pickName(); }
+  else if(!ME && !canConfirm()){ pickName(); }
   else if(S.editBoxes){ boxEditor(); }
   else { g.hidden=true; m.hidden=false; $("tab-admin").hidden=!canConfirm(); setTab(S.tab); render(); return; }
   g.hidden=false; m.hidden=true;
@@ -822,6 +829,7 @@ function renderMode(){
   else if(isBoxAdmin()){ c.className="modechip live"; c.textContent=shortBox(adminBox()||"Box")+" admin"; }
   else { c.className="modechip live"; c.textContent="Saved"; }
   var w=$("whoami"); w.innerHTML="";
+  if(!ME){ w.textContent = isAdmin() ? "Every box, every coach." : "Every class and every request at "+shortBox(adminBox()||"this box")+"."; return; }
   w.appendChild(document.createTextNode(ME+" · "));
   var a=el("a",null,"not you?"); a.href="#"; a.addEventListener("click",function(ev){ ev.preventDefault();
     ME=null; try{ localStorage.removeItem("coach-name"); }catch(e){} renderAll(); });
@@ -1076,7 +1084,7 @@ function renderCoachFilter(){
   var seen={};
   S.schedule.shifts.forEach(function(s){
     var c=(s.coach||"").trim();
-    if(!canConfirm() && c!==ME) return;
+    if(!inScope(s)) return;
     if(c && !seen[c.toLowerCase()]){ seen[c.toLowerCase()]=1; var o=el("option",null,c); o.value=c; sel.appendChild(o); }
   });
   sel.value = prev || (canConfirm() ? "" : ME);
@@ -1085,6 +1093,7 @@ function renderCoachFilter(){
 function shownShifts(){
   var coach=$("f-coach").value, from=$("f-from").value, to=$("f-to").value;
   return S.schedule.shifts.map(function(s,i){ s._i=i; return s; }).filter(function(s){
+    if(!inScope(s)) return false;
     if(coach && (s.coach||"").trim().toLowerCase()!==coach.trim().toLowerCase()) return false;
     if(from && s.date && s.date<from) return false;
     if(to && s.date && s.date>to) return false;
@@ -1272,6 +1281,15 @@ function myBoxesSeen(){ // where your own classes are, plus whatever you ticked
   MYBOXES.forEach(function(b){ if(mine.indexOf(b)<0) mine.push(b); });
   return mine;
 }
+/* On an admin link every class is the same box, so the slot shows and colours the coach instead. */
+function coachList(){
+  var seen={}, out=[];
+  (S.schedule.shifts||[]).forEach(function(x){ if(!inScope(x)) return; var c=(x.coach||"").trim(); if(c && !seen[c]){ seen[c]=1; out.push(c); } });
+  return out.sort(function(a,b){ return a.localeCompare(b); });
+}
+function coachColor(name){ var i=coachList().indexOf((name||"").trim()); return "var(--c"+(i<0?0:i%6)+")"; }
+function slotName(x){ return canConfirm() ? ((x.coach||"").trim()||"—") : shortBox(x.box); }
+function slotColor(x){ return canConfirm() ? coachColor(x.coach) : boxColor(x.box); }
 function boxColor(name){
   var i=boxList().indexOf((name||"").trim());
   return "var(--c" + (i<0 ? 0 : i%6) + ")";
@@ -1283,7 +1301,7 @@ function requestFor(sh){
   }
   return null;
 }
-function coachMatch(x){ return (x.coach||"").trim()===ME; }
+function coachMatch(x){ return inScope(x); }
 function shiftsOn(ds){
   var list=(S.schedule.shifts||[]).filter(function(x){ return x.date===ds && coachMatch(x); });
   openForMe().forEach(function(r){   // plus the open covers you could pick up
@@ -1338,15 +1356,15 @@ function renderMonth(){
     var dots=el("div","cal-dots");
     list.slice(0,3).forEach(function(x){
       var r=requestFor(x);
-      var c=el("div","cal-chip"+markFor(x,r), normTime(x.time)+" "+shortBox(x.box));
-      if(!x._open) c.style.background=boxColor(x.box);
+      var c=el("div","cal-chip"+markFor(x,r), normTime(x.time)+" "+slotName(x));
+      if(!x._open) c.style.background=slotColor(x);
       chips.appendChild(c);
-      var dot=el("div","cal-dot"+markFor(x,requestFor(x))); if(!x._open) dot.style.background=boxColor(x.box); dots.appendChild(dot);
+      var dot=el("div","cal-dot"+markFor(x,requestFor(x))); if(!x._open) dot.style.background=slotColor(x); dots.appendChild(dot);
     });
     if(list.length>3){
       chips.appendChild(el("div","cal-more","+"+(list.length-3)+" more"));
       list.slice(3).forEach(function(x){
-        var dot=el("div","cal-dot"+markFor(x,requestFor(x))); if(!x._open) dot.style.background=boxColor(x.box); dots.appendChild(dot);
+        var dot=el("div","cal-dot"+markFor(x,requestFor(x))); if(!x._open) dot.style.background=slotColor(x); dots.appendChild(dot);
       });
     }
     cell.appendChild(chips); cell.appendChild(dots);
@@ -1360,14 +1378,14 @@ function renderMonth(){
 }
 function renderCalLegend(scope){
   var lg=$("cal-legend"); lg.innerHTML="";
-  boxList().forEach(function(b){
-    var n=scope.filter(function(x){ return (x.box||"").trim()===b; }).length;
+  (canConfirm() ? coachList() : boxList()).forEach(function(b){
+    var n=scope.filter(function(x){ return (canConfirm() ? (x.coach||"") : (x.box||"")).trim()===b; }).length;
     var k=el("div","cal-key");
-    var sw=el("i"); sw.style.background=boxColor(b); k.appendChild(sw);
-    k.appendChild(el("span",null, shortBox(b)+(n?" · "+n:"")));
+    var sw=el("i"); sw.style.background=canConfirm() ? coachColor(b) : boxColor(b); k.appendChild(sw);
+    k.appendChild(el("span",null, (canConfirm() ? b : shortBox(b))+(n?" · "+n:"")));
     lg.appendChild(k);
   });
-  var st={}; S.requests.forEach(function(r){ if((r.originalCoach||"").trim()===ME) st[r.status]=1; });
+  var st={}; S.requests.forEach(function(r){ if(canConfirm() || (r.originalCoach||"").trim()===ME) st[r.status]=1; });
   function stateKey(color,label,struck){ var k=el("div","cal-key"); var sw=el("i"); sw.style.background=color; if(struck) sw.style.opacity=".5";
     k.appendChild(sw); k.appendChild(el("span",null,label)); lg.appendChild(k); }
   if(st.open) stateKey("var(--crit)","Needs cover");
@@ -1445,11 +1463,11 @@ function renderWeek(){
     shiftsOn(ds).forEach(function(x){
       var r=requestFor(x);
       var ev=el("button","wk-ev"+markFor(x,r)); ev.type="button";
-      if(!x._open) ev.style.background=boxColor(x.box);
+      if(!x._open) ev.style.background=slotColor(x);
       ev.style.top=(PAD+((mins(x.time)-minH*60)/60)*ROW)+"px";
       ev.style.height=(ROW-3)+"px";
       ev.appendChild(el("b",null,normTime(x.time)));
-      ev.appendChild(el("span",null,shortBox(x.box)));
+      ev.appendChild(el("span",null,slotName(x)));
       ev.title=normTime(x.time)+" "+(x.klass||"")+" — "+x.box+(x._open?"  (needs cover — you could take it)":"");
       ev.addEventListener("click",function(){ S.calDay=ds; renderCal(); });
       col.appendChild(ev);
@@ -1467,9 +1485,9 @@ function renderWeek(){
     list.forEach(function(x){
       var r=requestFor(x);
       var row=el("button","wk-row"+markFor(x,r)); row.type="button";
-      var sw=el("i"); if(!x._open) sw.style.background=boxColor(x.box); row.appendChild(sw);
+      var sw=el("i"); if(!x._open) sw.style.background=slotColor(x); row.appendChild(sw);
       row.appendChild(el("span","t",normTime(x.time)));
-      row.appendChild(el("span","n",(x.klass||"class")+" · "+shortBox(x.box)));
+      row.appendChild(el("span","n",(x.klass||"class")+" · "+slotName(x)));
       row.addEventListener("click",function(){ S.calDay=ds; renderCal(); });
       wrap.appendChild(row);
     });
@@ -1697,11 +1715,11 @@ function boot(){
   renderAll();
   load().then(function(){ maybeAutoTab(); });
   setInterval(function(){
-    if(document.hidden || S.busy || !ME || S.editBoxes) return;
+    if(document.hidden || S.busy || !(ME||canConfirm()) || S.editBoxes) return;
     if(S.requests.some(function(r){ return r._claiming||r._confirmRemove; })) return;
     load();
   },20000);
-  document.addEventListener("visibilitychange",function(){ if(!document.hidden && ME) load(); });
+  document.addEventListener("visibilitychange",function(){ if(!document.hidden && (ME||canConfirm())) load(); });
 }
 boot();
 })();
