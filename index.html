@@ -859,7 +859,7 @@ function renderMode(){
 }
 function counts(){
   var c={open:0,claimed:0,sent:0,verified:0,mismatch:0,cancelled:0,urgent:0};
-  S.requests.forEach(function(r){
+  scopedRequests().forEach(function(r){
     c[r.status]=(c[r.status]||0)+1;
     if(r.status==="open" && hoursUntil(r)<24 && hoursUntil(r)>-2) c.urgent++;
   });
@@ -875,7 +875,7 @@ function renderStats(){
   }
   function showLog(f){ S.logFilter=f; setTab("log"); }
   tile("c", c.open, c.open===1?"class needs cover":"classes need cover", function(){ setTab("board"); });
-  tile("w", c.claimed+c.sent, "waiting on admin", function(){ if(canConfirm()) setTab("admin"); else showLog("pending"); });
+  tile("w", c.claimed+c.sent, canConfirm() ? "waiting on you" : "waiting on admin", function(){ if(canConfirm()) setTab("admin"); else showLog("pending"); });
   tile("o", c.verified, "confirmed in system", function(){ showLog("verified"); });
 }
 function renderTopAlert(){
@@ -924,12 +924,18 @@ function renderFilters(){
     f.appendChild(b);
   });
 }
-function visibleRequests(){
-  var base=S.requests.filter(function(r){
-    if(canConfirm()) return true;
-    return isMine(r) || r.claimedBy===ME || (r.status==="open" && openForMe().indexOf(r)>=0);
+/* What this link is about: an admin's whole box; a coach's own requests, the
+   shifts they have taken, and the open ones they could take. Tiles, alerts
+   and Covers all count the same set. */
+function scopedRequests(){
+  if(canConfirm()) return S.requests.slice();
+  var takeable=openForMe();
+  return S.requests.filter(function(r){
+    return isMine(r) || r.claimedBy===ME || takeable.indexOf(r)>=0;
   });
-  return base.filter(function(r){
+}
+function visibleRequests(){
+  return scopedRequests().filter(function(r){
     if(S.filter==="all") return r.status!=="cancelled";
     if(S.filter==="pending") return r.status==="claimed"||r.status==="sent";
     return r.status===S.filter;
