@@ -62,15 +62,18 @@ body{
 /* ---------- header ---------- */
 .masthead{padding-block:22px 14px; display:flex; align-items:center; gap:12px}
 .masthead > div{flex:1 1 auto}
-/* the profile button lives in the page's top-left corner, outside the content column */
+/* the profile button lives in the page's top-right corner, outside the content column */
 body{position:relative}
-.profile{position:absolute; top:14px; left:14px; z-index:25}
-@media (max-width:760px){ .masthead{padding-left:50px} }
+.profile{position:absolute; top:14px; right:14px; z-index:25}
+@media (max-width:760px){ .masthead{padding-right:50px} }
+/* the day you tapped, lit on the week grid */
+.wk-head.sel{background:var(--accent-soft)}
+.wk-col.sel{background:var(--accent-soft)}
 .avatar{appearance:none; width:40px; height:40px; border-radius:50%; border:1px solid var(--line);
   background:var(--accent); color:var(--accent-ink); font:inherit; font-size:13px; font-weight:600;
   letter-spacing:.03em; cursor:pointer; box-shadow:var(--shadow); display:flex; align-items:center; justify-content:center}
 .avatar:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
-.menu{position:absolute; left:0; top:46px; min-width:230px; background:var(--surface); border:1px solid var(--line);
+.menu{position:absolute; right:0; top:46px; min-width:230px; background:var(--surface); border:1px solid var(--line);
   border-radius:10px; box-shadow:0 8px 24px rgba(23,26,36,.14); padding:6px; z-index:30}
 .menu .hd{padding:8px 10px 10px; font-size:12.5px; color:var(--ink-2); border-bottom:1px solid var(--line); margin-bottom:4px; line-height:1.4}
 .menu .hd b{display:block; color:var(--ink); font-size:13.5px}
@@ -1490,7 +1493,7 @@ function renderMonth(){
     }
     cell.appendChild(chips); cell.appendChild(dots);
     (function(dsv){ cell.addEventListener("click",function(){
-      S.calDay = (S.calDay===dsv ? null : dsv); renderCal();
+      S.calDay = (S.calDay===dsv ? null : dsv); S.scrollToDay=!!S.calDay; renderCal();
     }); })(ds);
     g.appendChild(cell);
   }
@@ -1530,6 +1533,11 @@ function renderCal(){
   $("wk-wrap").hidden = !week;
   if(week) renderWeek(); else renderMonth();
   renderCalDetail();
+  if(S.scrollToDay){   // only on a tap, never on a background refresh
+    S.scrollToDay=false;
+    var det=$("cal-detail");
+    if(det && S.calDay) setTimeout(function(){ det.scrollIntoView({behavior:"smooth", block:"start"}); }, 30);
+  }
 }
 function renderWeek(){
   var today=new Date(); today.setHours(0,0,0,0);
@@ -1566,7 +1574,7 @@ function renderWeek(){
   var g=$("wk-grid"); g.innerHTML="";
   g.appendChild(el("div","wk-headgutter"));
   days.forEach(function(ds,i){
-    var h=el("div","wk-head"+(ds===iso(today)?" today":""));
+    var h=el("div","wk-head"+(ds===iso(today)?" today":"")+(ds===S.calDay?" sel":""));
     h.appendChild(el("span",null,dow[i]));
     h.appendChild(el("b",null,String(new Date(ds+"T00:00:00").getDate())));
     g.appendChild(h);
@@ -1581,7 +1589,7 @@ function renderWeek(){
   g.appendChild(gut);
 
   days.forEach(function(ds){
-    var col=el("div","wk-col"); col.style.height=H+"px";
+    var col=el("div","wk-col"+(ds===S.calDay?" sel":"")); col.style.height=H+"px";
     for(var hh=minH+1; hh<maxH; hh++){
       var ln=el("div","wk-line"); ln.style.top=(PAD+(hh-minH)*ROW)+"px"; col.appendChild(ln);
     }
@@ -1594,7 +1602,7 @@ function renderWeek(){
       ev.appendChild(el("b",null,normTime(x.time)));
       ev.appendChild(el("span",null,slotName(x)));
       ev.title=normTime(x.time)+" "+(x.klass||"")+" — "+x.box+(x._open?"  (needs cover — you could take it)":"");
-      ev.addEventListener("click",function(){ S.calDay=ds; renderCal(); });
+      ev.addEventListener("click",function(){ S.calDay=ds; S.scrollToDay=true; renderCal(); });
       col.appendChild(ev);
     });
     g.appendChild(col);
@@ -1613,7 +1621,7 @@ function renderWeek(){
       var sw=el("i"); if(!x._open) sw.style.background=slotColor(x); row.appendChild(sw);
       row.appendChild(el("span","t",normTime(x.time)));
       row.appendChild(el("span","n",(x.klass||"class")+" · "+slotName(x)));
-      row.addEventListener("click",function(){ S.calDay=ds; renderCal(); });
+      row.addEventListener("click",function(){ S.calDay=ds; S.scrollToDay=true; renderCal(); });
       wrap.appendChild(row);
     });
     L.appendChild(wrap);
