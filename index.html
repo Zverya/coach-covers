@@ -593,6 +593,7 @@ function isMine(r){ return !!ME && (r.originalCoach===ME || r.createdBy===ME); }
 function WHO(){ return ME || (isBoxAdmin() ? shortBox(adminBox()||"box")+" admin" : "admin"); }
 /* What this link is allowed to see on the calendar: your classes, or the box's. */
 function inScope(x){
+  if(!(x.coach||"").trim()) return false;   // 24/7 and open-gym slots have no coach — nothing to cover
   if(isAdmin()) return true;
   if(isBoxAdmin()) return (x.box||"").trim()===(adminBox()||"").trim();
   return (x.coach||"").trim()===ME;
