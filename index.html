@@ -271,7 +271,7 @@ hr.sep{border:0; border-top:1px solid var(--line); margin-block:22px}
 .cal-chip{font-size:9.5px; line-height:1.35; padding:1px 4px; border-radius:4px;
   color:var(--chip-ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   font-variant-numeric:tabular-nums}
-.cal-chip.covered{opacity:.55; text-decoration:line-through}
+
 .cal-dot{width:7px; height:7px; border-radius:50%}
 .cal-more{font-size:9px; color:var(--ink-3); padding-left:1px}
 .cal-legend{display:flex; flex-wrap:wrap; gap:10px; margin-top:14px}
@@ -306,7 +306,7 @@ hr.sep{border:0; border-top:1px solid var(--line); margin-block:22px}
   color:var(--chip-ink); font-size:9.5px; line-height:1.25; overflow:hidden; cursor:pointer;
   border:0; text-align:left; font-family:inherit; display:block}
 .wk-ev b{display:block; font-weight:600; font-variant-numeric:tabular-nums}
-.wk-ev.covered{opacity:.5; text-decoration:line-through}
+
 .wk-ev:focus-visible{outline:2px solid var(--ink); outline-offset:1px}
 
 /* week: stacked list for phones */
@@ -322,7 +322,7 @@ hr.sep{border:0; border-top:1px solid var(--line); margin-block:22px}
 .wk-row .t{font-family:"IBM Plex Mono",monospace; font-size:12.5px; font-weight:500;
   font-variant-numeric:tabular-nums; flex:none; color:var(--ink)}
 .wk-row .n{font-size:12.5px; color:var(--ink-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-.wk-row.covered{opacity:.6}
+
 .wk-none{font-size:12px; color:var(--ink-3); padding:2px 0 0 1px}
 @media (max-width:640px){
   .wk-grid{display:none}
@@ -357,6 +357,18 @@ hr.sep{border:0; border-top:1px solid var(--line); margin-block:22px}
 .wk-ev.open,.cal-chip.open{background:var(--ok-bg)!important; color:var(--ok); border:1.5px dashed var(--ok)}
 .wk-row.open i,.cal-dot.open{background:var(--ok-bg)!important; border:1.5px dashed var(--ok); box-sizing:border-box}
 .wk-row.open .n{color:var(--ok)}
+/* a class with a request takes the request's status colour, same as the cards */
+.wk-ev.s-open,.cal-chip.s-open{background:var(--crit)!important}
+.wk-ev.s-claimed,.wk-ev.s-sent,.cal-chip.s-claimed,.cal-chip.s-sent{background:var(--warn)!important}
+.wk-ev.s-mismatch,.cal-chip.s-mismatch{background:var(--bad)!important}
+.wk-ev.s-verified,.cal-chip.s-verified{opacity:.5; text-decoration:line-through}
+.wk-row.s-open i,.cal-dot.s-open{background:var(--crit)!important}
+.wk-row.s-claimed i,.wk-row.s-sent i,.cal-dot.s-claimed,.cal-dot.s-sent{background:var(--warn)!important}
+.wk-row.s-mismatch i,.cal-dot.s-mismatch{background:var(--bad)!important}
+.wk-row.s-verified{opacity:.6}
+.alert.ok{background:var(--ok-bg); color:var(--ok)}
+.alert .dismiss{margin-left:auto; appearance:none; border:0; background:transparent; color:inherit;
+  font:inherit; font-size:12px; text-decoration:underline; cursor:pointer; flex:none; padding:0}
 .boxhead{display:flex; align-items:center; gap:10px; margin:18px 0 8px}
 .boxhead h3{font-family:Oswald,sans-serif; font-weight:500; text-transform:uppercase; letter-spacing:.05em;
   font-size:13px; margin:0; color:var(--ink)}
@@ -605,7 +617,7 @@ function load(){
   return rpc("board_state",{p_token:TOKEN}).then(function(res){
     S.loading=false;
     if(!res||res.ok===false){ S.err=(res&&res.error)||"unknown"; }
-    else { S.err=null; applyState(res); }
+    else { S.err=null; applyState(res); announceNews(); }
     return syncExtras();
   }).then(function(){ renderAll(); })
   .catch(function(){ S.loading=false; S.err="network"; renderAll(); });
@@ -646,7 +658,7 @@ function doClaim(r, who){
   S.busy=r.id; render();
   rpc("claim_cover",{p_token:TOKEN,p_request:r.id,p_coach:who}).then(function(res){
     S.busy=null;
-    if(res&&res.ok) toast(res.clash ? who+" is already on at another box then — recorded anyway, check it." : (who===ME ? "Yours. The box admin will update Arbox." : "Recorded for "+who+"."));
+    if(res&&res.ok) toast(res.clash ? who+" is already on at another box then — recorded anyway, check it." : (who===ME ? "Yours. Tell "+firstName(r.originalCoach)+" — there's a WhatsApp button on the card." : "Recorded for "+who+"."));
     else if(res&&res.error==="taken") toast((res.takenBy||"Someone")+" already took this one");
     else toast("Couldn't take it — try again.");
     return load();
@@ -671,6 +683,7 @@ function doRelease(r){
   }).catch(fail);
 }
 function doRaise(sh){
+  askNotify();
   S.busy=key(sh); render();
   rpc("raise_cover",{p_token:TOKEN,p_key:key(sh),p_coach:ME}).then(function(res){
     S.busy=null; toast(res&&res.ok?"Added to the board":"Already on the board.");
@@ -727,6 +740,41 @@ function openForMe(){
     if(r.status!=="open" || isMine(r)) return false;
     return !mine.length || mine.indexOf((r.box||"").trim())>=0;
   });
+}
+
+/* ============================ telling the coach ============================ */
+var ACK={}; try{ ACK=JSON.parse(localStorage.getItem("cover-ack")||"{}")||{}; }catch(e){ ACK={}; }
+function ackKey(r){ return r.id+":"+(r.claimedBy||""); }
+function ackNews(list){ list.forEach(function(r){ ACK[ackKey(r)]=1; }); try{ localStorage.setItem("cover-ack",JSON.stringify(ACK)); }catch(e){} }
+/* Your requests that somebody has taken and you haven't acknowledged yet. */
+function takenNews(){
+  return S.requests.filter(function(r){
+    return isMine(r) && r.claimedBy && r.claimedBy!==ME && (r.status==="claimed"||r.status==="sent"||r.status==="verified") && !ACK[ackKey(r)];
+  }).sort(sortByTime);
+}
+function newsLine(r){ return r.claimedBy+" took your "+when(r)+" "+(r.klass||"class")+" at "+shortBox(r.box); }
+function firstName(n){ return String(n||"").trim().split(/\s+/)[0]||"them"; }
+/* The taker tells the coach directly — no phone numbers stored, WhatsApp asks whom to send it to. */
+function tellOnWhatsApp(r){
+  var msg="Hi "+firstName(r.originalCoach)+", I've taken your "+when(r)+" "+(r.klass||"class")+" at "+shortBox(r.box)
+         +" on the cover board. The box admin still needs to move it in Arbox.";
+  window.open("https://wa.me/?text="+encodeURIComponent(msg),"_blank","noopener");
+}
+function askNotify(){
+  if(!("Notification" in window) || Notification.permission!=="default") return;
+  Notification.requestPermission().catch(function(){});
+}
+var NOTIFIED={}; try{ NOTIFIED=JSON.parse(localStorage.getItem("cover-notified")||"{}")||{}; }catch(e){ NOTIFIED={}; }
+/* Once per taken shift: a toast, and a system notification when allowed. */
+function announceNews(){
+  var fresh=takenNews().filter(function(r){ return !NOTIFIED[ackKey(r)]; });
+  if(!fresh.length) return;
+  fresh.forEach(function(r){ NOTIFIED[ackKey(r)]=1; });
+  try{ localStorage.setItem("cover-notified",JSON.stringify(NOTIFIED)); }catch(e){}
+  toast(newsLine(fresh[0])+(fresh.length>1?" (+"+(fresh.length-1)+" more)":""));
+  if("Notification" in window && Notification.permission==="granted"){
+    try{ new Notification("Cover taken",{body:fresh.map(newsLine).join("\n"), tag:"cover-taken"}); }catch(e){}
+  }
 }
 
 /* ============================ roster ============================ */
@@ -807,6 +855,22 @@ function renderStats(){
 }
 function renderTopAlert(){
   var c=counts(), z=$("topalert"); z.innerHTML="";
+  var news=takenNews();
+  if(news.length){
+    var n=el("div","alert ok");
+    n.appendChild(el("span","ic","\u2713"));
+    var body=el("span");
+    news.forEach(function(r,i){
+      if(i) body.appendChild(document.createElement("br"));
+      var st=el("strong",null,newsLine(r)); body.appendChild(st);
+      body.appendChild(document.createTextNode(r.status==="verified" ? " — confirmed in the system." : " — the box admin still needs to move it in Arbox."));
+    });
+    n.appendChild(body);
+    var ok=el("button","dismiss","Got it"); ok.type="button";
+    ok.addEventListener("click",function(){ ackNews(news); render(); });
+    n.appendChild(ok);
+    z.appendChild(n);
+  }
   if(c.mismatch>0){
     var a=el("div","alert bad");
     a.appendChild(el("span","ic","!"));
@@ -955,6 +1019,7 @@ function reqCard(r){
   }
   if(r.status==="claimed"){
     if(canConfirm()) btn("Updated in Arbox","primary",function(){ doConfirm(r,false); });
+    if(r.claimedBy===ME) btn("Tell "+firstName(r.originalCoach)+" on WhatsApp","primary",function(){ tellOnWhatsApp(r); });
     if(r.claimedBy===ME) btn("Undo claim",null,function(){ doRelease(r); });
     btn("Copy for admin",null,function(){ copyText(adminMessage([r])); });
   }
@@ -1082,6 +1147,7 @@ function updateCreateBtn(){
   b.disabled = n===0 || S.busy==="bulk";
 }
 function commitPick(){
+  askNotify();
   var picked=S.schedule.shifts.filter(function(s,i){ return S.sel[i]; });
   if(!picked.length){ toast("Tick at least one shift"); return; }
   raiseMany(picked);
@@ -1237,7 +1303,7 @@ function shiftsOn(ds){
   }
   return list.sort(function(a,b){ return normTime(a.time).localeCompare(normTime(b.time)); });
 }
-function markFor(x, r){ return x._open ? " open" : (r ? " covered" : ""); }
+function markFor(x, r){ return x._open ? " open" : (r ? " s-"+r.status : ""); }
 function renderMonth(){
   var sh=S.schedule.shifts||[];
   var today=new Date(); today.setHours(0,0,0,0);
@@ -1285,12 +1351,12 @@ function renderMonth(){
       var c=el("div","cal-chip"+markFor(x,r), normTime(x.time)+" "+shortBox(x.box));
       if(!x._open) c.style.background=boxColor(x.box);
       chips.appendChild(c);
-      var dot=el("div","cal-dot"+(x._open?" open":"")); if(!x._open) dot.style.background=boxColor(x.box); dots.appendChild(dot);
+      var dot=el("div","cal-dot"+markFor(x,requestFor(x))); if(!x._open) dot.style.background=boxColor(x.box); dots.appendChild(dot);
     });
     if(list.length>3){
       chips.appendChild(el("div","cal-more","+"+(list.length-3)+" more"));
       list.slice(3).forEach(function(x){
-        var dot=el("div","cal-dot"+(x._open?" open":"")); if(!x._open) dot.style.background=boxColor(x.box); dots.appendChild(dot);
+        var dot=el("div","cal-dot"+markFor(x,requestFor(x))); if(!x._open) dot.style.background=boxColor(x.box); dots.appendChild(dot);
       });
     }
     cell.appendChild(chips); cell.appendChild(dots);
@@ -1311,6 +1377,13 @@ function renderCalLegend(scope){
     k.appendChild(el("span",null, shortBox(b)+(n?" · "+n:"")));
     lg.appendChild(k);
   });
+  var st={}; S.requests.forEach(function(r){ if(!S.calCoach || (r.originalCoach||"").trim()===S.calCoach) st[r.status]=1; });
+  function stateKey(color,label,struck){ var k=el("div","cal-key"); var sw=el("i"); sw.style.background=color; if(struck) sw.style.opacity=".5";
+    k.appendChild(sw); k.appendChild(el("span",null,label)); lg.appendChild(k); }
+  if(st.open) stateKey("var(--crit)","Needs cover");
+  if(st.claimed||st.sent) stateKey("var(--warn)","Cover taken — waiting on admin");
+  if(st.mismatch) stateKey("var(--bad)","Not updated in the system");
+  if(st.verified) stateKey("var(--ok)","Confirmed",true);
   if(S.calCoach===ME && openForMe().length){
     var k2=el("div","cal-key"); var sw2=el("i"); sw2.style.background="var(--ok-bg)"; sw2.style.border="1.5px dashed var(--ok)"; sw2.style.boxSizing="border-box";
     k2.appendChild(sw2); k2.appendChild(el("span",null,"Needs cover — you could take it")); lg.appendChild(k2);
