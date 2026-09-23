@@ -131,6 +131,45 @@ select,input[type=text]{font:inherit;font-size:15px;color:var(--ink);background:
 .cal-title{font-family:Oswald,sans-serif;font-weight:600;font-size:16px;text-transform:uppercase;
   letter-spacing:.04em;margin:0 auto 0 0}
 .cal-sum{font-size:12px;color:var(--ink-2);width:100%;margin:-4px 0 10px}
+.seg{display:flex;gap:2px;background:var(--surface-2);padding:2px;border-radius:7px;border:1px solid var(--line)}
+.seg button{appearance:none;border:0;background:transparent;font-family:inherit;font-size:11.5px;
+  font-weight:500;color:var(--ink-2);padding:5px 11px;border-radius:5px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);font-weight:600;box-shadow:var(--shadow)}
+.seg button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cal-dow{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);
+  text-align:center;font-weight:600;padding-bottom:2px}
+.cal-cell{background:var(--surface);border:1px solid var(--line);border-radius:8px;
+  min-height:76px;padding:5px 5px 4px;display:flex;flex-direction:column;gap:3px;
+  overflow:hidden;text-align:left;font-family:inherit;cursor:pointer;color:inherit}
+.cal-cell:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.cal-cell.blank{background:transparent;border-color:transparent;cursor:default;min-height:0}
+.cal-cell.off{opacity:.45}
+.cal-cell.today{border-color:var(--accent)}
+.cal-cell.sel{background:var(--accent-soft);border-color:var(--accent)}
+.cal-day{font-size:11px;font-weight:600;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.cal-cell.today .cal-day{color:var(--accent)}
+.cal-chips{display:flex;flex-direction:column;gap:2px}
+.cal-dots{display:none;flex-wrap:wrap;gap:3px}
+.cal-chip{font-size:9.5px;line-height:1.35;padding:1px 4px;border-radius:4px;
+  color:var(--chip-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  font-variant-numeric:tabular-nums}
+.cal-chip.covered{opacity:.55;text-decoration:line-through}
+.cal-chip.free{border:1px dashed var(--ok)}
+.cal-dot{width:7px;height:7px;border-radius:50%}
+.cal-more{font-size:9px;color:var(--ink-3);padding-left:1px}
+.cal-detail{margin-top:18px}
+.cal-dhead{display:flex;align-items:baseline;gap:10px;margin-bottom:8px}
+.cal-detail h3{font-family:Oswald,sans-serif;font-weight:500;text-transform:uppercase;
+  letter-spacing:.05em;font-size:13px;margin:0;color:var(--ink)}
+.lnk{appearance:none;border:0;background:none;color:var(--accent);font:inherit;font-size:12px;
+  cursor:pointer;text-decoration:underline;padding:0;margin-left:auto}
+.cardline{font-size:13.5px;color:var(--ink-2);margin:6px 0 0}
+@media (max-width:640px){
+  .cal-cell{min-height:52px}
+  .cal-chips{display:none}
+  .cal-dots{display:flex}
+}
 .wk-grid{display:grid;grid-template-columns:46px repeat(7,1fr);border:1px solid var(--line);
   border-radius:10px;overflow:hidden;background:var(--surface)}
 .wk-head{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);
@@ -200,7 +239,9 @@ var ME = null; try { ME = localStorage.getItem("coach-name"); } catch (e) {}
 var TAB = null; try { TAB = localStorage.getItem("coach-tab"); } catch (e) {}
 var MYBOXES = []; try { MYBOXES = JSON.parse(localStorage.getItem("coach-boxes")||"[]")||[]; } catch (e) { MYBOXES=[]; }
 
-var S = { loading:true, err:null, data:null, busy:null, tab:TAB||"schedule", weekStart:null, cfilter:"all" };
+var CALVIEW = null; try { CALVIEW = localStorage.getItem("coach-calview"); } catch (e) {}
+var S = { loading:true, err:null, data:null, busy:null, tab:TAB||"schedule", weekStart:null,
+          cfilter:"all", calView:CALVIEW||"week", calDay:null, calY:null, calM:null };
 
 function $(s,r){ return (r||document).querySelector(s); }
 function el(t,c,x){ var n=document.createElement(t); if(c)n.className=c; if(x!=null)n.textContent=x; return n; }
@@ -477,6 +518,7 @@ function boxEditor(app,d){
 function renderSchedule(app,d){
   var today=new Date(); today.setHours(0,0,0,0);
   if(!S.weekStart) S.weekStart=iso(sundayOf(today));
+  if(S.calY==null){ S.calY=today.getFullYear(); S.calM=today.getMonth(); }
   var ws=new Date(S.weekStart+"T00:00:00");
   var days=[]; for(var i=0;i<7;i++){ var x=new Date(ws.getTime()); x.setDate(x.getDate()+i); days.push(iso(x)); }
 
@@ -515,7 +557,7 @@ function renderSchedule(app,d){
   }
   function tagText(e){
     if(e.kind==="take") return "free";
-    if(e.kind==="cover") return e.r.status==="verified" ? "covering" : (e.r.status==="approved" ? "covering" : "covering");
+    if(e.kind==="cover") return "covering";
     if(e.st==="await") return e.r && e.r.claimedBy ? "cover taken" : "needs cover";
     if(e.st==="handed") return "covered";
     return "yours";
@@ -527,21 +569,37 @@ function renderSchedule(app,d){
     if(e.st==="handed") return "handed";
     return "teach";
   }
+  function evColor(e){
+    if(e.kind==="cover") return "var(--ok)";
+    if(e.kind==="take") return "var(--ok-bg)";
+    if(e.st==="await") return "var(--warn)";
+    return boxColor(e.box);
+  }
   function act(e){
     if(e.kind==="take"){ doClaim(e.r); return; }
     if(e.kind==="cover"){
       if(e.r.status==="claimed") doRelease(e.r);
-      else toast(e.r.status==="verified" ? "Confirmed in Arbox." : "You're covering this \u2014 the box admin is updating Arbox.");
+      else toast(e.r.status==="verified" ? "Confirmed in Arbox." : "You're covering this — the box admin is updating Arbox.");
       return;
     }
-    if(e.st==="await"){ toast(e.r && e.r.claimedBy ? (e.r.claimedBy+" is taking it \u2014 pending Arbox update") : "On the board \u2014 nobody has taken it yet"); return; }
+    if(e.st==="await"){ toast(e.r && e.r.claimedBy ? (e.r.claimedBy+" is taking it — pending Arbox update") : "On the board — nobody has taken it yet"); return; }
     if(e.st==="handed"){ toast((e.r&&e.r.claimedBy?e.r.claimedBy:"Someone")+" is covering"+(e.r&&e.r.status==="verified"?", confirmed in Arbox":"")); return; }
     doRaise(e.s); // my class, not yet on the board
   }
 
-  var weekEvents={}; var nMine=0,nTake=0,nAwait=0,nCover=0;
-  days.forEach(function(ds){
-    var evs=eventsOn(ds); weekEvents[ds]=evs;
+  var month = S.calView==="month";
+  var months=["January","February","March","April","May","June","July","August","September","October","November","December"];
+  var dow=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+  // ---- which dates the current view covers, and their events
+  var span=[];
+  if(month){
+    var dim=new Date(S.calY,S.calM+1,0).getDate();
+    for(var dd=1; dd<=dim; dd++) span.push(S.calY+"-"+pad(S.calM+1)+"-"+pad(dd));
+  } else { span=days.slice(); }
+  var EV={}; var nMine=0,nTake=0,nAwait=0,nCover=0;
+  span.forEach(function(ds){
+    var evs=eventsOn(ds); EV[ds]=evs;
     evs.forEach(function(e){
       if(e.kind==="take") nTake++;
       else if(e.kind==="cover") nCover++;
@@ -549,104 +607,240 @@ function renderSchedule(app,d){
       else if(e.st==="teach") nMine++;
     });
   });
+  function evsOn(ds){ return EV[ds] || (EV[ds]=eventsOn(ds)); }
 
-  var months=["January","February","March","April","May","June","July","August","September","October","November","December"];
+  // ---- header: title, week/month switch, navigation
   var we=new Date(ws.getTime()); we.setDate(we.getDate()+6);
   var h=el("div","cal-head");
-  h.appendChild(el("h2","cal-title",pad(ws.getDate())+"\u2013"+pad(we.getDate())+" "+months[we.getMonth()]));
-  function nav(lbl,fn){ var b=el("button","btn",lbl); b.type="button"; b.addEventListener("click",fn); h.appendChild(b); }
-  nav("\u2190",function(){ var w=new Date(S.weekStart+"T00:00:00"); w.setDate(w.getDate()-7); S.weekStart=iso(w); render(); });
-  nav("Today",function(){ S.weekStart=iso(sundayOf(new Date())); render(); });
-  nav("\u2192",function(){ var w=new Date(S.weekStart+"T00:00:00"); w.setDate(w.getDate()+7); S.weekStart=iso(w); render(); });
+  h.appendChild(el("h2","cal-title", month
+    ? (months[S.calM]+" "+S.calY)
+    : (pad(ws.getDate())+"–"+pad(we.getDate())+" "+months[we.getMonth()])));
+
+  var seg=el("div","seg");
+  [["week","Week"],["month","Month"]].forEach(function(v){
+    var b=el("button",null,v[1]); b.type="button";
+    b.setAttribute("aria-pressed", String(S.calView===v[0]));
+    b.addEventListener("click",function(){
+      if(S.calView===v[0]) return;
+      S.calView=v[0];
+      if(v[0]==="month" && S.weekStart){ var a=new Date(S.weekStart+"T00:00:00"); a.setDate(a.getDate()+3); S.calY=a.getFullYear(); S.calM=a.getMonth(); }
+      if(v[0]==="week" && S.calDay) S.weekStart=iso(sundayOf(new Date(S.calDay+"T00:00:00")));
+      try{ localStorage.setItem("coach-calview",S.calView); }catch(e){}
+      render();
+    });
+    seg.appendChild(b);
+  });
+  h.appendChild(seg);
+
+  function nav(lbl,fn,aria){ var b=el("button","btn",lbl); b.type="button";
+    if(aria) b.setAttribute("aria-label",aria); b.addEventListener("click",fn); h.appendChild(b); }
+  nav("←",function(){
+    if(month){ var m=S.calM-1,y=S.calY; if(m<0){m=11;y--;} S.calM=m; S.calY=y; }
+    else { var w=new Date(S.weekStart+"T00:00:00"); w.setDate(w.getDate()-7); S.weekStart=iso(w); }
+    S.calDay=null; render();
+  },"Previous");
+  nav("Today",function(){
+    var t=new Date(); t.setHours(0,0,0,0);
+    S.weekStart=iso(sundayOf(t)); S.calY=t.getFullYear(); S.calM=t.getMonth(); S.calDay=iso(t); render();
+  });
+  nav("→",function(){
+    if(month){ var m=S.calM+1,y=S.calY; if(m>11){m=0;y++;} S.calM=m; S.calY=y; }
+    else { var w=new Date(S.weekStart+"T00:00:00"); w.setDate(w.getDate()+7); S.weekStart=iso(w); }
+    S.calDay=null; render();
+  },"Next");
+
   var bits=[];
   bits.push(nMine+" yours");
   if(nAwait) bits.push(nAwait+" awaiting cover");
   if(nTake) bits.push(nTake+" you can pick up");
   if(nCover) bits.push(nCover+" you're covering");
-  h.appendChild(el("p","cal-sum", bits.join(" \u00b7 ")));
+  h.appendChild(el("p","cal-sum", bits.join(" · ") + (month?" this month":" this week")));
   app.appendChild(h);
 
-  // hour bounds from all events shown
-  var allT=[]; days.forEach(function(ds){ weekEvents[ds].forEach(function(e){ allT.push(e.t); }); });
-  var minH=6,maxH=21;
-  if(allT.length){ minH=Math.max(0,Math.floor(Math.min.apply(null,allT)/60)-1);
-    maxH=Math.min(24,Math.ceil(Math.max.apply(null,allT)/60)+2);
-    if(maxH-minH<6) maxH=Math.min(24,minH+6); }
-  var ROW=34,PAD=9,H=(maxH-minH)*ROW+PAD*2;
-  var dow=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  if(month) monthGrid(); else weekGrid();
 
-  var g=el("div","wk-grid");
-  g.appendChild(el("div","wk-headgutter"));
-  days.forEach(function(ds,i){
-    var hd=el("div","wk-head"+(ds===iso(today)?" today":""));
-    hd.appendChild(el("span",null,dow[i]));
-    hd.appendChild(el("b",null,String(new Date(ds+"T00:00:00").getDate())));
-    g.appendChild(hd);
-  });
-  var gut=el("div","wk-gutter"); gut.style.height=H+"px";
-  for(var hh=minH;hh<=maxH;hh++){ var lb=el("div","wk-hour",pad(hh)+":00");
-    lb.style.top=(PAD+(hh-minH)*ROW)+"px"; gut.appendChild(lb); }
-  g.appendChild(gut);
-
-  days.forEach(function(ds){
-    var col=el("div","wk-col"); col.style.height=H+"px";
-    for(var hh=minH+1;hh<maxH;hh++){ var ln=el("div","wk-line"); ln.style.top=(PAD+(hh-minH)*ROW)+"px"; col.appendChild(ln); }
-    // side-by-side within the same start minute
-    var buckets={}; weekEvents[ds].forEach(function(e){ (buckets[e.t]=buckets[e.t]||[]).push(e); });
-    Object.keys(buckets).forEach(function(tk){
-      var group=buckets[tk]; var w=100/group.length;
-      group.forEach(function(e,idx){
-        var ev=el("button","wk-ev st-"+tagClass(e)); ev.type="button";
-        if(e.kind==="mine"||e.kind==="cover") ev.style.background=e.kind==="cover"?"var(--ok)":boxColor(e.box);
-        if(e.st==="await") ev.style.background="var(--warn)";
-        if(e.kind==="take"){ ev.style.background="var(--ok-bg)"; }
-        ev.style.left="calc("+(idx*w)+"% + 2px)";
-        ev.style.width="calc("+w+"% - 4px)"; ev.style.right="auto";
-        ev.style.top=(PAD+((e.t-minH*60)/60)*ROW)+"px";
-        ev.style.height=(ROW-3)+"px";
-        ev.appendChild(el("b",null,hm(e.time)));
-        ev.appendChild(el("span",null,e.label));
-        ev.title=hm(e.time)+" "+e.label+" \u2014 "+e.box+"  ("+tagText(e)+")";
-        (function(ee){ ev.addEventListener("click",function(){ act(ee); }); })(e);
-        col.appendChild(ev);
+  // ---- month: 7-column grid of days
+  function monthGrid(){
+    var firstDow=new Date(S.calY,S.calM,1).getDay();
+    var dim=new Date(S.calY,S.calM+1,0).getDate();
+    var g=el("div","cal-grid");
+    dow.forEach(function(x){ g.appendChild(el("div","cal-dow",x)); });
+    for(var b=0;b<firstDow;b++) g.appendChild(el("div","cal-cell blank"));
+    for(var dn=1; dn<=dim; dn++){
+      var ds=S.calY+"-"+pad(S.calM+1)+"-"+pad(dn);
+      var evs=evsOn(ds);
+      var cell=el("button","cal-cell"); cell.type="button";
+      if(ds===iso(today)) cell.className+=" today";
+      if(ds===S.calDay) cell.className+=" sel";
+      if(!evs.length) cell.className+=" off";
+      cell.setAttribute("aria-label", ds+", "+evs.length+" classes");
+      cell.appendChild(el("div","cal-day",String(dn)));
+      var chips=el("div","cal-chips"), dots=el("div","cal-dots");
+      evs.slice(0,3).forEach(function(e){
+        var c=el("div","cal-chip"+(e.st==="handed"?" covered":"")+(e.kind==="take"?" free":""),
+                 hm(e.time)+" "+shortBox(e.box));
+        c.style.background=evColor(e);
+        if(e.kind==="take") c.style.color="var(--ok)";
+        chips.appendChild(c);
+        var dt1=el("div","cal-dot"); dt1.style.background=evColor(e); dots.appendChild(dt1);
       });
-    });
-    g.appendChild(col);
-  });
-  app.appendChild(g);
+      if(evs.length>3){
+        chips.appendChild(el("div","cal-more","+"+(evs.length-3)+" more"));
+        evs.slice(3).forEach(function(e){ var dt2=el("div","cal-dot"); dt2.style.background=evColor(e); dots.appendChild(dt2); });
+      }
+      cell.appendChild(chips); cell.appendChild(dots);
+      (function(dsv){ cell.addEventListener("click",function(){
+        S.calDay = (S.calDay===dsv ? null : dsv); render();
+      }); })(ds);
+      g.appendChild(cell);
+    }
+    app.appendChild(g);
+  }
 
-  // stacked list (phones)
-  var L=el("div","wk-list");
-  days.forEach(function(ds,i){
-    var evs=weekEvents[ds];
-    var wrap=el("div","wk-day"+(ds===iso(today)?" today":""));
-    var dd=new Date(ds+"T00:00:00");
-    wrap.appendChild(el("h4",null,dow[i]+" "+pad(dd.getDate())+"/"+pad(dd.getMonth()+1)));
-    if(!evs.length) wrap.appendChild(el("div","wk-none","\u2014"));
-    evs.forEach(function(e){
-      var row=el("button","wk-row st-"+tagClass(e)); row.type="button";
-      var sw=el("i"); sw.style.background = e.kind==="take"||e.kind==="cover" ? "var(--ok)" : (e.st==="await"?"var(--warn)":boxColor(e.box));
-      row.appendChild(sw);
-      row.appendChild(el("span","t",hm(e.time)));
-      row.appendChild(el("span","n", e.label+" \u00b7 "+shortBox(e.box)));
-      row.appendChild(el("span","tag "+tagClass(e), tagText(e)));
-      (function(ee){ row.addEventListener("click",function(){ act(ee); }); })(e);
-      wrap.appendChild(row);
-    });
-    L.appendChild(wrap);
-  });
-  app.appendChild(L);
+  // ---- week: time grid + stacked list on phones
+  function weekGrid(){
+    var allT=[]; days.forEach(function(ds){ evsOn(ds).forEach(function(e){ allT.push(e.t); }); });
+    var minH=6,maxH=21;
+    if(allT.length){ minH=Math.max(0,Math.floor(Math.min.apply(null,allT)/60)-1);
+      maxH=Math.min(24,Math.ceil(Math.max.apply(null,allT)/60)+2);
+      if(maxH-minH<6) maxH=Math.min(24,minH+6); }
+    var ROW=34,PAD=9,H=(maxH-minH)*ROW+PAD*2;
 
-  // legend of the layers
+    var g=el("div","wk-grid");
+    g.appendChild(el("div","wk-headgutter"));
+    days.forEach(function(ds,i){
+      var hd=el("div","wk-head"+(ds===iso(today)?" today":""));
+      hd.appendChild(el("span",null,dow[i]));
+      hd.appendChild(el("b",null,String(new Date(ds+"T00:00:00").getDate())));
+      g.appendChild(hd);
+    });
+    var gut=el("div","wk-gutter"); gut.style.height=H+"px";
+    for(var hh=minH;hh<=maxH;hh++){ var lb=el("div","wk-hour",pad(hh)+":00");
+      lb.style.top=(PAD+(hh-minH)*ROW)+"px"; gut.appendChild(lb); }
+    g.appendChild(gut);
+
+    days.forEach(function(ds){
+      var col=el("div","wk-col"); col.style.height=H+"px";
+      for(var hh=minH+1;hh<maxH;hh++){ var ln=el("div","wk-line"); ln.style.top=(PAD+(hh-minH)*ROW)+"px"; col.appendChild(ln); }
+      // side-by-side within the same start minute
+      var buckets={}; evsOn(ds).forEach(function(e){ (buckets[e.t]=buckets[e.t]||[]).push(e); });
+      Object.keys(buckets).forEach(function(tk){
+        var group=buckets[tk]; var w=100/group.length;
+        group.forEach(function(e,idx){
+          var ev=el("button","wk-ev st-"+tagClass(e)); ev.type="button";
+          if(e.kind!=="take") ev.style.background=evColor(e);
+          ev.style.left="calc("+(idx*w)+"% + 2px)";
+          ev.style.width="calc("+w+"% - 4px)"; ev.style.right="auto";
+          ev.style.top=(PAD+((e.t-minH*60)/60)*ROW)+"px";
+          ev.style.height=(ROW-3)+"px";
+          ev.appendChild(el("b",null,hm(e.time)));
+          ev.appendChild(el("span",null,e.label));
+          ev.title=hm(e.time)+" "+e.label+" — "+e.box+"  ("+tagText(e)+")";
+          (function(dsv){ ev.addEventListener("click",function(){ S.calDay=dsv; render(); }); })(ds);
+          col.appendChild(ev);
+        });
+      });
+      g.appendChild(col);
+    });
+    app.appendChild(g);
+
+    var L=el("div","wk-list");
+    days.forEach(function(ds,i){
+      var evs=evsOn(ds);
+      var wrap=el("div","wk-day"+(ds===iso(today)?" today":""));
+      var dd2=new Date(ds+"T00:00:00");
+      wrap.appendChild(el("h4",null,dow[i]+" "+pad(dd2.getDate())+"/"+pad(dd2.getMonth()+1)));
+      if(!evs.length) wrap.appendChild(el("div","wk-none","—"));
+      evs.forEach(function(e){
+        var row=el("button","wk-row st-"+tagClass(e)); row.type="button";
+        var sw=el("i"); sw.style.background=evColor(e);
+        if(e.kind==="take") sw.style.border="1.5px solid var(--ok)";
+        row.appendChild(sw);
+        row.appendChild(el("span","t",hm(e.time)));
+        row.appendChild(el("span","n", e.label+" · "+shortBox(e.box)));
+        row.appendChild(el("span","tag "+tagClass(e), tagText(e)));
+        (function(ee){ row.addEventListener("click",function(){ act(ee); }); })(e);
+        wrap.appendChild(row);
+      });
+      L.appendChild(wrap);
+    });
+    app.appendChild(L);
+  }
+
+  // ---- legend of the layers
   var lg=el("div","legend");
-  function key(color,label){ var k=el("div","key"); var sw=el("i"); sw.style.background=color; k.appendChild(sw); k.appendChild(el("span",null,label)); lg.appendChild(k); }
+  function key(color,label,dash){ var k=el("div","key"); var sw=el("i"); sw.style.background=color;
+    if(dash) sw.style.border="1.5px dashed var(--ok)";
+    k.appendChild(sw); k.appendChild(el("span",null,label)); lg.appendChild(k); }
   key("var(--c0)","Your class");
   key("var(--warn)","Awaiting cover");
   key("var(--ok)","You're covering");
-  var tk=el("div","key"); var ti=el("i"); ti.style.background="var(--ok-bg)"; ti.style.border="1.5px dashed var(--ok)"; tk.appendChild(ti); tk.appendChild(el("span",null,"Free to pick up")); lg.appendChild(tk);
+  key("var(--ok-bg)","Free to pick up",true);
   app.appendChild(lg);
 
-  app.appendChild(el("p","foot","Tap your class to ask for cover. Tap a green dashed slot to pick up a shift someone needs covered. The box admin then updates Arbox, and a nightly check confirms it."));
+  // ---- the day you tapped, in full
+  renderCalDetail(app);
+
+  app.appendChild(el("p","foot","Tap a day to open it. Tap your class to ask for cover, or a green dashed slot to pick up a shift someone needs covered. The box admin then updates Arbox, and a nightly check confirms it."));
+
+  function renderCalDetail(parent){
+    if(!S.calDay) return;
+    var w=el("div","cal-detail");
+    var list=evsOn(S.calDay);
+    var dt=new Date(S.calDay+"T00:00:00");
+    var full=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+    var hd=el("div","cal-dhead");
+    hd.appendChild(el("h3",null, isNaN(dt.getTime()) ? S.calDay
+      : full[dt.getDay()]+", "+pad(dt.getDate())+"/"+pad(dt.getMonth()+1)));
+    var cl=el("button","lnk","Close"); cl.type="button";
+    cl.addEventListener("click",function(){ S.calDay=null; render(); });
+    hd.appendChild(cl);
+    w.appendChild(hd);
+
+    if(!list.length){ w.appendChild(el("div","empty","Nothing scheduled.")); parent.appendChild(w); return; }
+
+    list.forEach(function(e){
+      var cls = e.kind==="take" ? "open" : e.kind==="cover" ? "mine"
+              : e.st==="await" ? "waiting" : e.st==="handed" ? "done" : "";
+      var c=el("div","card "+cls);
+      var top=el("div","top");
+      top.appendChild(el("span","when",hm(e.time)));
+      top.appendChild(el("span","box",shortBox(e.box)));
+      top.appendChild(el("span","pill "+cls, tagText(e)));
+      c.appendChild(top);
+      var line=e.label;
+      if(e.r && e.r.claimedBy) line += "  →  "+e.r.claimedBy;
+      else if(e.r && e.kind==="take" && e.r.originalCoach) line += "  ·  "+e.r.originalCoach+"'s class";
+      c.appendChild(el("p","cardline",line));
+
+      var acts=el("div","acts");
+      function btn(lbl,cls2,fn){ var b=el("button","btn"+(cls2?" "+cls2:""),lbl); b.type="button";
+        if(S.busy && (S.busy===(e.r&&e.r.id) || S.busy===(e.s&&e.s.key))){ b.disabled=true; }
+        b.addEventListener("click",fn); acts.appendChild(b); }
+
+      if(e.kind==="take") btn("Take this shift","primary",function(){ doClaim(e.r); });
+      else if(e.kind==="cover"){
+        if(e.r.status==="claimed") btn("Put it back","ghost",function(){ doRelease(e.r); });
+        if(canConfirm()) btn(e.r.status==="approved"||e.r.status==="verified"?"Confirmed":"Confirm in Arbox","",function(){ doConfirm(e.r,false); });
+      }
+      else if(e.st==="teach") btn("Ask for cover","primary",function(){ doRaise(e.s); });
+      else if(e.st==="await" || e.st==="handed"){
+        btn("Copy the message","ghost",function(){ copyOne(e); });
+      }
+      if(acts.childNodes.length) c.appendChild(acts);
+      w.appendChild(c);
+    });
+    parent.appendChild(w);
+  }
+  function copyOne(e){
+    var dt=new Date(S.calDay+"T00:00:00");
+    var full=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+    var head=full[dt.getDay()]+" "+pad(dt.getDate())+"/"+pad(dt.getMonth()+1)+" "+hm(e.time)+" — "+e.label+" @ "+e.box;
+    var txt = e.r && e.r.claimedBy
+      ? head+"\n"+(e.r.originalCoach||ME)+"  ->  "+e.r.claimedBy+"\nPlease update the coach on this class in Arbox."
+      : head+"\nNeeds cover. It's on the board — take it there so it doesn't get double-booked.";
+    copyText(txt);
+  }
 }
 
 /* -------------------------------------------------------------- covers */
@@ -929,6 +1123,15 @@ function renderApprovals(app,d){
   if(done.length) app.appendChild(el("p","foot",done.length+" swap"+(done.length===1?"":"s")+" confirmed in Arbox."));
 }
 
+function copyText(txt){
+  function fb(){ var ta=document.createElement("textarea"); ta.value=txt;
+    ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta);
+    ta.select(); var ok=false; try{ok=document.execCommand("copy");}catch(e){}
+    ta.remove(); toast(ok?"Copied":"Couldn't copy"); }
+  if(navigator.clipboard&&navigator.clipboard.writeText)
+    navigator.clipboard.writeText(txt).then(function(){toast("Copied");},fb);
+  else fb();
+}
 function copyChanges(rs){
   var lines=["Please update the coach on these classes:",""];
   rs.slice().sort(function(a,b){ return (a.date+a.time).localeCompare(b.date+b.time); })
@@ -937,14 +1140,7 @@ function copyChanges(rs){
       lines.push("    "+(r.originalCoach||"unassigned")+"  ->  "+(r.claimedBy||"TBC"));
     });
   lines.push(""); lines.push("All approved. Flagging because the hours need to land on the coach who actually taught.");
-  var txt=lines.join("\n");
-  function fb(){ var ta=document.createElement("textarea"); ta.value=txt;
-    ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta);
-    ta.select(); var ok=false; try{ok=document.execCommand("copy");}catch(e){}
-    ta.remove(); toast(ok?"Copied":"Couldn't copy"); }
-  if(navigator.clipboard&&navigator.clipboard.writeText)
-    navigator.clipboard.writeText(txt).then(function(){toast("Copied");},fb);
-  else fb();
+  copyText(lines.join("\n"));
 }
 
 /* ------------------------------------------------------------- actions */
