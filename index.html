@@ -411,7 +411,6 @@ hr.sep{border:0; border-top:1px solid var(--line); margin-block:22px}
   <section id="panel-cal" hidden>
     <div class="cal-head">
       <h2 class="cal-title" id="cal-title">Month</h2>
-      <label class="fld" style="flex:0 0 auto"><select id="cal-coach" aria-label="Whose classes"></select></label>
       <div class="seg" id="cal-seg">
         <button type="button" data-view="week"  id="seg-week"  aria-pressed="true">Week</button>
         <button type="button" data-view="month" id="seg-month" aria-pressed="false">Month</button>
@@ -499,7 +498,7 @@ var S = {
   schedule:{shifts:[], importedAt:null},
   requests:[],
   tab:SAVED_TAB||"cal", sel:{},
-  calY:null, calM:null, calDay:null, calView:SAVED_VIEW||"week", weekStart:null, calCoach:null,
+  calY:null, calM:null, calDay:null, calView:SAVED_VIEW||"week", weekStart:null,
   userPickedTab:!!SAVED_TAB, autoTabDone:false,
   editBoxes:false, boxesSynced:false, boxReqs:[]
 };
@@ -1284,18 +1283,14 @@ function requestFor(sh){
   }
   return null;
 }
-function coachMatch(x){
-  return !S.calCoach || (x.coach||"").trim()===S.calCoach;
-}
+function coachMatch(x){ return (x.coach||"").trim()===ME; }
 function shiftsOn(ds){
   var list=(S.schedule.shifts||[]).filter(function(x){ return x.date===ds && coachMatch(x); });
-  if(S.calCoach===ME){   // your view also carries the open covers you could pick up
-    openForMe().forEach(function(r){
-      if(r.date!==ds) return;
-      if(list.some(function(x){ return key(x)===r.k; })) return;
-      list.push({k:r.k, date:r.date, time:r.time, box:r.box, klass:r.klass, coach:r.originalCoach, _open:true});
-    });
-  }
+  openForMe().forEach(function(r){   // plus the open covers you could pick up
+    if(r.date!==ds) return;
+    if(list.some(function(x){ return key(x)===r.k; })) return;
+    list.push({k:r.k, date:r.date, time:r.time, box:r.box, klass:r.klass, coach:r.originalCoach, _open:true});
+  });
   return list.sort(function(a,b){ return normTime(a.time).localeCompare(normTime(b.time)); });
 }
 function markFor(x, r){ return x._open ? " open" : (r ? " s-"+r.status : ""); }
@@ -1372,34 +1367,19 @@ function renderCalLegend(scope){
     k.appendChild(el("span",null, shortBox(b)+(n?" · "+n:"")));
     lg.appendChild(k);
   });
-  var st={}; S.requests.forEach(function(r){ if(!S.calCoach || (r.originalCoach||"").trim()===S.calCoach) st[r.status]=1; });
+  var st={}; S.requests.forEach(function(r){ if((r.originalCoach||"").trim()===ME) st[r.status]=1; });
   function stateKey(color,label,struck){ var k=el("div","cal-key"); var sw=el("i"); sw.style.background=color; if(struck) sw.style.opacity=".5";
     k.appendChild(sw); k.appendChild(el("span",null,label)); lg.appendChild(k); }
   if(st.open) stateKey("var(--crit)","Needs cover");
   if(st.claimed||st.sent) stateKey("var(--warn)","Cover taken — waiting on admin");
   if(st.mismatch) stateKey("var(--bad)","Not updated in the system");
   if(st.verified) stateKey("var(--ok)","Confirmed",true);
-  if(S.calCoach===ME && openForMe().length){
+  if(openForMe().length){
     var k2=el("div","cal-key"); var sw2=el("i"); sw2.style.background="var(--ok-bg)"; sw2.style.border="1.5px dashed var(--ok)"; sw2.style.boxSizing="border-box";
     k2.appendChild(sw2); k2.appendChild(el("span",null,"Needs cover — you could take it")); lg.appendChild(k2);
   }
 }
-function renderCoachPicker(){
-  var sel=$("cal-coach"); if(!sel) return;
-  var names=coachNames();
-  if(S.calCoach===null){
-    var saved=null; try{ saved=localStorage.getItem("cal-coach"); }catch(e){}
-    if(saved!==null) S.calCoach=saved;
-    else S.calCoach = names.indexOf(ME)>=0 ? ME : "";
-  }
-  sel.innerHTML="";
-  var all=el("option",null,"Everyone's classes"); all.value=""; sel.appendChild(all);
-  names.forEach(function(n){ var o=el("option",null, n===ME ? "My classes ("+n+")" : n); o.value=n; sel.appendChild(o); });
-  if(S.calCoach && names.indexOf(S.calCoach)<0){ var o2=el("option",null,S.calCoach); o2.value=S.calCoach; sel.appendChild(o2); }
-  sel.value=S.calCoach||"";
-}
 function renderCal(){
-  renderCoachPicker();
   var week = S.calView==="week";
   $("seg-month").setAttribute("aria-pressed", week?"false":"true");
   $("seg-week").setAttribute("aria-pressed", week?"true":"false");
@@ -1645,7 +1625,7 @@ function pickName(){
     if(!nameSel || !nameSel.value){ toast("Pick your name"); return; }
     ME=nameSel.value; MYBOXES=sel;
     try{ localStorage.setItem("coach-name",ME); }catch(e){}
-    S.boxesSynced=true; S.calCoach=null; saveBoxes();
+    S.boxesSynced=true; saveBoxes();
     renderAll();
   });
   g.appendChild(go); $("gate").appendChild(g);
@@ -1701,11 +1681,6 @@ function boot(){
     var t=new Date();
     S.calY=t.getFullYear(); S.calM=t.getMonth();
     S.weekStart=iso(sundayOf(t)); S.calDay=iso(t); renderCal();
-  });
-  $("cal-coach").addEventListener("change",function(){
-    S.calCoach=this.value;
-    try{ localStorage.setItem("cal-coach", S.calCoach); }catch(e){}
-    S.calDay=null; renderCal();
   });
   Array.prototype.forEach.call(document.querySelectorAll("#cal-seg button"),function(b){
     b.addEventListener("click",function(){
