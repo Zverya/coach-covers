@@ -386,7 +386,7 @@ hr.sep{border:0; border-top:1px solid var(--line); margin-block:22px}
   border-radius:8px; background:var(--surface); font-size:14px; cursor:pointer}
 .boxrow input{width:17px; height:17px; accent-color:var(--accent); cursor:pointer}
 #whoami a{color:var(--accent)}
-.tab[hidden]{display:none}
+.tab[hidden],.fld[hidden]{display:none}
 /* a cover you could take: the box's slot, outlined instead of filled */
 .wk-ev.open,.cal-chip.open{background:var(--ok-bg)!important; color:var(--ok); border:1.5px dashed var(--ok)}
 .wk-row.open i,.cal-dot.open{background:var(--ok-bg)!important; border:1.5px dashed var(--ok); box-sizing:border-box}
@@ -469,12 +469,8 @@ button.stat:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
 
   <!-- ============ PICK SHIFTS ============ -->
   <section id="panel-pick" hidden>
-    <div class="row tight" style="margin-bottom:14px">
-      <button class="btn ghost" id="btn-backcal" type="button">&larr; Back to schedule</button>
-    </div>
     <div class="panel-head">
       <h2>Pick the shifts that need cover</h2>
-      <p>Your schedule is already loaded. Narrow by date, then tick the rows. Each one goes on the board for the others to take. This never changes anything in Arbox.</p>
     </div>
     <div class="row">
       <label class="fld" id="f-coach-wrap"><span>Coach</span><select id="f-coach"></select></label>
@@ -1792,7 +1788,6 @@ function boot(){
     ws.setDate(ws.getDate()+n*7); S.weekStart=iso(ws);
   }
   $("btn-manual").addEventListener("click",function(){ setTab("pick"); });
-  $("btn-backcal").addEventListener("click",function(){ setTab("cal"); });
   $("btn-backlog").addEventListener("click",function(){ setTab("cal"); });
   $("lnk-log").addEventListener("click",function(ev){ ev.preventDefault(); S.userPickedTab=true; setTab("log"); window.scrollTo(0,0); });
   $("cal-prev").addEventListener("click",function(){ shiftWeek(-1); S.calDay=null; renderCal(); });
