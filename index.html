@@ -17,8 +17,9 @@
   --accent:#2A3F9D; --accent-ink:#FFF; --accent-soft:#E7EAF7;
   --crit:#C0392B; --crit-bg:#FBEBE7; --warn:#9A6206; --warn-bg:#FAF0DC;
   --ok:#14713C; --ok-bg:#E3F2E8; --bad:#A31515; --bad-bg:#FAE8E8;
-  --c0:#2A3F9D; --c1:#1A6A8F; --c2:#7C3AED; --c3:#A81E5B; --c4:#5B21B6; --c5:#3F4A5F;
-  --chip-ink:#FFF; --shadow:0 1px 2px rgba(23,26,36,.06);
+  --c0:#2A3F9D; --c1:#0F766E; --c2:#7C3AED; --c3:#9A5B0A; --c4:#A81E5B; --c5:#14602F;
+  --chip-ink:#FFF; --r:10px;
+  --shadow:0 1px 2px rgba(23,26,36,.06), 0 1px 1px rgba(23,26,36,.04);
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#101219; --surface:#191C26; --surface-2:#212530; --line:#2C313F;
@@ -26,7 +27,7 @@
   --accent:#8A9BF0; --accent-ink:#11131B; --accent-soft:#222840;
   --crit:#F08A72; --crit-bg:#2E1E1A; --warn:#E0B255; --warn-bg:#2C2417;
   --ok:#6BC98C; --ok-bg:#16281D; --bad:#EE8686; --bad-bg:#2E1A1A;
-  --c0:#94A6F5; --c1:#6FC3E3; --c2:#C4A3FF; --c3:#F2A0C4; --c4:#B79BFF; --c5:#9AA8BF;
+  --c0:#94A6F5; --c1:#5ECFC2; --c2:#C4A3FF; --c3:#E0B255; --c4:#F2A0C4; --c5:#6BC98C;
   --chip-ink:#12141B; --shadow:0 1px 2px rgba(0,0,0,.4);
 }}
 *{box-sizing:border-box} html,body{margin:0}
@@ -56,6 +57,17 @@ h1{font-family:Oswald,sans-serif; font-weight:600; font-size:23px; text-transfor
 .alert.bad{background:var(--bad-bg);color:var(--bad)}
 .alert.note2{background:var(--surface-2);color:var(--ink-2);border:1px solid var(--line)}
 .alert .ic{font-family:Oswald,sans-serif;font-weight:600;flex:none}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px}
+.row > *{flex:1 1 140px;min-width:0}
+.row.tight > *{flex:0 0 auto}
+label.fld{display:flex;flex-direction:column;gap:4px;font-size:11px;text-transform:uppercase;
+  letter-spacing:.06em;color:var(--ink-2);font-weight:600}
+.fld select,.fld input{font:inherit;font-size:13px;color:var(--ink);background:var(--surface);
+  border:1px solid var(--line);border-radius:8px;padding:7px 9px;width:100%;
+  font-family:inherit;text-transform:none;letter-spacing:0;font-weight:400}
+.fld select:focus-visible,.fld input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+td.pick{width:34px;text-align:center}
+input[type="checkbox"]{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
 .filters{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px}
 .fchip{appearance:none;cursor:pointer;border:1px solid var(--line);background:var(--surface);
   color:var(--ink-2);font-family:inherit;font-size:12px;padding:5px 10px;border-radius:999px}
@@ -273,9 +285,19 @@ function isBoxAdmin(){ return S.data && S.data.role==="box_admin"; }
 function canConfirm(){ return isAdmin() || isBoxAdmin(); }
 function adminBox(){ return (S.data && S.data.adminBox) || null; }
 
+function allCoaches(){ var seen={},o=[]; ((S.data&&S.data.shifts)||[]).forEach(function(s){
+  var c=(s.coach||"").trim(); if(c&&!seen[c]){seen[c]=1;o.push(c);} }); return o.sort(); }
 function boxes(){ var seen={},o=[]; ((S.data&&S.data.shifts)||[]).forEach(function(s){
   var b=(s.box||"").trim(); if(b&&!seen[b]){seen[b]=1;o.push(b);} }); return o.sort(); }
-function boxColor(b){ var i=boxes().indexOf((b||"").trim()); return "var(--c"+(i<0?0:i%6)+")"; }
+/* The boxes you coach at take the first palette slots, so your own schedule
+   reads in the same colours however many other gyms are on the board. */
+function paletteOrder(){
+  var all=boxes(), o=[];
+  MYBOXES.forEach(function(b){ if(all.indexOf(b)>=0 && o.indexOf(b)<0) o.push(b); });
+  all.forEach(function(b){ if(o.indexOf(b)<0) o.push(b); });
+  return o;
+}
+function boxColor(b){ var i=paletteOrder().indexOf((b||"").trim()); return "var(--c"+(i<0?0:i%6)+")"; }
 
 function load(){
   return rpc("board_state",{p_token:TOKEN}).then(function(res){
@@ -395,7 +417,7 @@ function render(){
   tb("record","Record",0);
   app.appendChild(tabs);
 
-  if(S.tab==="schedule") renderSchedule(app,d);
+  if(S.tab==="schedule") { if(S.picker) renderPicker(app,d); else renderSchedule(app,d); }
   else if(S.tab==="approvals" && canConfirm()) renderApprovals(app,d);
   else if(S.tab==="record") renderRecord(app,d);
   else renderCovers(app,d);
@@ -524,10 +546,15 @@ function renderSchedule(app,d){
 
   var reqByKey={}; (d.requests||[]).forEach(function(r){ reqByKey[r.key]=r; });
 
+  // Whose classes the calendar is showing. Yours by default; pick another coach
+  // to see theirs, the way the board does.
+  var VIEW = S.schedCoach || ME;
+  var other = VIEW !== ME;
+
   // --- the four layers, per day ---
   function eventsOn(ds){
     var evs=[];
-    var mine=(d.shifts||[]).filter(function(s){ return s.coach===ME && s.date===ds; });
+    var mine=(d.shifts||[]).filter(function(s){ return s.coach===VIEW && s.date===ds; });
     var myTimes=mine.map(function(s){ return hm(s.time); });
     // 1. my own classes (with awaiting / handed-over states)
     mine.forEach(function(s){
@@ -536,8 +563,9 @@ function renderSchedule(app,d){
              : (r.status==="open"||r.status==="claimed"||r.status==="rejected") ? "await"
              : (r.status==="approved"||r.status==="verified") ? "handed" : "teach";
       evs.push({t:mins(s.time), time:s.time, box:s.box, label:(s.klass||shortBox(s.box)),
-                kind:"mine", st:st, s:s, r:r});
+                kind:other?"other":"mine", st:st, s:s, r:r});
     });
+    if(other) return evs.sort(function(a,b){ return a.t-b.t; });
     // 2. shifts I am free to take, across all boxes (open, not mine, no clash)
     (d.requests||[]).forEach(function(r){
       if(r.date!==ds || r.status!=="open") return;
@@ -556,6 +584,8 @@ function renderSchedule(app,d){
     return evs.sort(function(a,b){ return a.t-b.t; });
   }
   function tagText(e){
+    if(e.kind==="other") return e.st==="await" ? (e.r&&e.r.claimedBy?"cover taken":"needs cover")
+                       : e.st==="handed" ? "covered" : "scheduled";
     if(e.kind==="take") return "free";
     if(e.kind==="cover") return "covering";
     if(e.st==="await") return e.r && e.r.claimedBy ? "cover taken" : "needs cover";
@@ -563,6 +593,7 @@ function renderSchedule(app,d){
     return "yours";
   }
   function tagClass(e){
+    if(e.kind==="other") return e.st==="await" ? "await" : e.st==="handed" ? "handed" : "teach";
     if(e.kind==="take") return "take";
     if(e.kind==="cover") return "covering";
     if(e.st==="await") return "await";
@@ -576,6 +607,7 @@ function renderSchedule(app,d){
     return boxColor(e.box);
   }
   function act(e){
+    if(e.kind==="other"){ S.calDay=e.s.date; render(); return; }
     if(e.kind==="take"){ doClaim(e.r); return; }
     if(e.kind==="cover"){
       if(e.r.status==="claimed") doRelease(e.r);
@@ -616,6 +648,14 @@ function renderSchedule(app,d){
     ? (months[S.calM]+" "+S.calY)
     : (pad(ws.getDate())+"–"+pad(we.getDate())+" "+months[we.getMonth()])));
 
+  var who=el("label","fld"); who.style.flex="0 0 auto";
+  var sel=el("select"); sel.setAttribute("aria-label","Whose classes");
+  var me=el("option",null,"My classes"); me.value=ME; sel.appendChild(me);
+  allCoaches().forEach(function(c){ if(c===ME) return; var o=el("option",null,c); o.value=c; sel.appendChild(o); });
+  sel.value=VIEW;
+  sel.addEventListener("change",function(){ S.schedCoach = sel.value===ME ? null : sel.value; S.calDay=null; render(); });
+  who.appendChild(sel); h.appendChild(who);
+
   var seg=el("div","seg");
   [["week","Week"],["month","Month"]].forEach(function(v){
     var b=el("button",null,v[1]); b.type="button";
@@ -650,7 +690,7 @@ function renderSchedule(app,d){
   },"Next");
 
   var bits=[];
-  bits.push(nMine+" yours");
+  bits.push(other ? (nMine+(nMine===1?" class":" classes")) : (nMine+" yours"));
   if(nAwait) bits.push(nAwait+" awaiting cover");
   if(nTake) bits.push(nTake+" you can pick up");
   if(nCover) bits.push(nCover+" you're covering");
@@ -772,16 +812,24 @@ function renderSchedule(app,d){
   function key(color,label,dash){ var k=el("div","key"); var sw=el("i"); sw.style.background=color;
     if(dash) sw.style.border="1.5px dashed var(--ok)";
     k.appendChild(sw); k.appendChild(el("span",null,label)); lg.appendChild(k); }
-  key("var(--c0)","Your class");
+  paletteOrder().filter(function(b){ return !MYBOXES.length || MYBOXES.indexOf(b)>=0; })
+    .slice(0,6).forEach(function(b){ key(boxColor(b), shortBox(b)); });
   key("var(--warn)","Awaiting cover");
-  key("var(--ok)","You're covering");
-  key("var(--ok-bg)","Free to pick up",true);
+  if(!other){ key("var(--ok)","You're covering"); key("var(--ok-bg)","Free to pick up",true); }
   app.appendChild(lg);
 
   // ---- the day you tapped, in full
   renderCalDetail(app);
 
-  app.appendChild(el("p","foot","Tap a day to open it. Tap your class to ask for cover, or a green dashed slot to pick up a shift someone needs covered. The box admin then updates Arbox, and a nightly check confirms it."));
+  app.appendChild(el("p","foot", other
+    ? "Showing "+VIEW+"'s classes. Tap a day to open it."
+    : "Tap a day to open it. Tap your class to ask for cover, or a green dashed slot to pick up a shift someone needs covered. The box admin then updates Arbox, and a nightly check confirms it."));
+
+  // Several shifts at once, by date range — the board's "pick the shifts that need cover".
+  var pickRow=el("div","row tight"); pickRow.style.marginTop="24px";
+  var pk=el("button","btn ghost","Pick shifts that need cover"); pk.type="button";
+  pk.addEventListener("click",function(){ S.picker=true; render(); });
+  pickRow.appendChild(pk); app.appendChild(pickRow);
 
   function renderCalDetail(parent){
     if(!S.calDay) return;
@@ -823,7 +871,7 @@ function renderSchedule(app,d){
         if(e.r.status==="claimed") btn("Put it back","ghost",function(){ doRelease(e.r); });
         if(canConfirm()) btn(e.r.status==="approved"||e.r.status==="verified"?"Confirmed":"Confirm in Arbox","",function(){ doConfirm(e.r,false); });
       }
-      else if(e.st==="teach") btn("Ask for cover","primary",function(){ doRaise(e.s); });
+      else if(e.st==="teach"){ if(!other || canConfirm()) btn("Ask for cover","primary",function(){ doRaise(e.s); }); }
       else if(e.st==="await" || e.st==="handed"){
         btn("Copy the message","ghost",function(){ copyOne(e); });
       }
@@ -841,6 +889,92 @@ function renderSchedule(app,d){
       : head+"\nNeeds cover. It's on the board — take it there so it doesn't get double-booked.";
     copyText(txt);
   }
+}
+
+/* -------------------------------------------------------------- picker */
+/* Narrow by coach or date, tick the rows, raise them all in one go. Mirrors
+   the board's step 3; the schedule is already loaded, so there is nothing to paste. */
+function renderPicker(app,d){
+  var today=new Date(); today.setHours(0,0,0,0);
+  if(!S.pk){ var to=new Date(today.getTime()); to.setDate(to.getDate()+13);
+    S.pk={coach:ME, from:iso(today), to:iso(to), sel:{}}; }
+  var P=S.pk;
+  var reqByKey={}; (d.requests||[]).forEach(function(r){ reqByKey[r.key]=r; });
+
+  var back=el("div","row tight"); back.style.marginBottom="14px";
+  var bb=el("button","btn ghost","\u2190 Back to schedule"); bb.type="button";
+  bb.addEventListener("click",function(){ S.picker=false; render(); });
+  back.appendChild(bb); app.appendChild(back);
+
+  app.appendChild(el("h2",null,"Pick the shifts that need cover"));
+  app.appendChild(el("p","sub2","Narrow by coach or date, then tick the rows. Raising them puts each one on the board for the others to take."));
+
+  var row=el("div","row");
+  function fld(label,node){ var l=el("label","fld"); l.appendChild(el("span",null,label)); l.appendChild(node); row.appendChild(l); return node; }
+  var cs=el("select");
+  if(canConfirm()){ allCoaches().forEach(function(c){ var o=el("option",null,c); o.value=c; cs.appendChild(o); }); }
+  else { var o1=el("option",null,ME); o1.value=ME; cs.appendChild(o1); cs.disabled=true; }
+  cs.value=P.coach; cs.addEventListener("change",function(){ P.coach=cs.value; P.sel={}; render(); });
+  fld("Coach",cs);
+  var fi=el("input"); fi.type="date"; fi.value=P.from; fi.addEventListener("change",function(){ P.from=fi.value; render(); }); fld("From",fi);
+  var ti=el("input"); ti.type="date"; ti.value=P.to; ti.addEventListener("change",function(){ P.to=ti.value; render(); }); fld("To",ti);
+  app.appendChild(row);
+
+  var shown=(d.shifts||[]).filter(function(x){
+    return x.coach===P.coach && (!P.from || x.date>=P.from) && (!P.to || x.date<=P.to);
+  }).sort(function(a,b){ return (a.date+hm(a.time)).localeCompare(b.date+hm(b.time)); });
+
+  if(!shown.length){ app.appendChild(el("div","empty","No classes for "+P.coach+" in that range.")); return; }
+
+  var sc=el("div","tscroll"), t=el("table"), th=el("tr");
+  ["","When","Box","Class","Status"].forEach(function(x){ th.appendChild(el("th",null,x)); });
+  t.appendChild(th);
+  shown.forEach(function(x){
+    var r=reqByKey[x.key]; var onBoard=!!r && r.status!=="rejected";
+    var tr=el("tr"); var td=el("td","pick");
+    var cb=el("input"); cb.type="checkbox"; cb.checked=!!P.sel[x.key]; cb.disabled=onBoard;
+    cb.addEventListener("change",function(){ if(cb.checked) P.sel[x.key]=1; else delete P.sel[x.key]; refreshCount(); });
+    td.appendChild(cb); tr.appendChild(td);
+    tr.appendChild(el("td","mono",when(x)));
+    tr.appendChild(el("td",null,shortBox(x.box)));
+    tr.appendChild(el("td",null,x.klass||"class"));
+    var stt = !r ? "\u2014"
+            : r.status==="open" ? "on the board"
+            : r.status==="claimed" ? "taken by "+(r.claimedBy||"?")
+            : r.status==="verified" ? "confirmed"
+            : r.status==="approved" ? "updated in Arbox"
+            : r.status==="mismatch" ? "needs checking" : r.status;
+    tr.appendChild(el("td",null,stt));
+    t.appendChild(tr);
+  });
+  sc.appendChild(t); app.appendChild(sc);
+
+  var acts=el("div","row tight"); acts.style.marginTop="10px";
+  var go=el("button","btn primary","Need cover for these"); go.type="button";
+  function refreshCount(){ var n=Object.keys(P.sel).length; go.textContent = n ? "Need cover for these ("+n+")" : "Need cover for these"; go.disabled=!n || !!S.busy; }
+  go.addEventListener("click",function(){ raiseMany(Object.keys(P.sel)); });
+  var all=el("button","btn ghost","Select all shown"); all.type="button";
+  all.addEventListener("click",function(){ shown.forEach(function(x){ var r=reqByKey[x.key]; if(!r || r.status==="rejected") P.sel[x.key]=1; }); render(); });
+  var clr=el("button","btn ghost","Clear"); clr.type="button";
+  clr.addEventListener("click",function(){ P.sel={}; render(); });
+  acts.appendChild(go); acts.appendChild(all); acts.appendChild(clr); app.appendChild(acts);
+  refreshCount();
+  app.appendChild(el("p","foot","Already-raised classes are greyed out. Nothing here changes Arbox \u2014 the box admin does that once someone takes the shift."));
+}
+function raiseMany(keys){
+  if(!keys.length) return;
+  S.busy="bulk"; render();
+  var done=0, dup=0;
+  (function next(i){
+    if(i>=keys.length){
+      S.busy=null; if(S.pk) S.pk.sel={};
+      toast(done ? (done+" put on the board"+(dup?", "+dup+" already there":"")) : "Already on the board.");
+      return load();
+    }
+    rpc("raise_cover",{p_token:TOKEN,p_key:keys[i],p_coach:ME})
+      .then(function(res){ if(res&&res.ok) done++; else dup++; next(i+1); })
+      .catch(function(){ S.busy=null; toast("Couldn't reach the board \u2014 "+done+" raised so far."); load(); });
+  })(0);
 }
 
 /* -------------------------------------------------------------- covers */
