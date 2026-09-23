@@ -1536,7 +1536,11 @@ function renderCal(){
   if(S.scrollToDay){   // only on a tap, never on a background refresh
     S.scrollToDay=false;
     var det=$("cal-detail");
-    if(det && S.calDay) setTimeout(function(){ det.scrollIntoView({behavior:"smooth", block:"start"}); }, 30);
+    if(det && S.calDay) setTimeout(function(){
+      var y=det.getBoundingClientRect().top+window.pageYOffset-10;
+      try{ window.scrollTo({top:y, behavior:"smooth"}); }catch(e){ window.scrollTo(0,y); }
+      setTimeout(function(){ if(Math.abs(window.pageYOffset-y)>40) window.scrollTo(0,y); }, 400);   // browsers that ignore smooth
+    }, 30);
   }
 }
 function renderWeek(){
