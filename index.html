@@ -435,25 +435,18 @@ button.stat:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
   <section id="panel-cal" hidden>
     <div class="cal-head">
       <h2 class="cal-title" id="cal-title">Month</h2>
-      <div class="seg" id="cal-seg">
-        <button type="button" data-view="week"  id="seg-week"  aria-pressed="true">Week</button>
-        <button type="button" data-view="month" id="seg-month" aria-pressed="false">Month</button>
-      </div>
+      <button class="btn" id="btn-manual" type="button">Multi-select</button>
       <button class="btn" id="cal-prev" type="button" aria-label="Previous">&larr;</button>
       <button class="btn" id="cal-today" type="button">Today</button>
       <button class="btn" id="cal-next" type="button" aria-label="Next month">&rarr;</button>
       <p class="cal-sum" id="cal-sum"></p>
     </div>
-    <div class="cal-grid" id="cal-grid"></div>
     <div id="wk-wrap" hidden>
       <div class="wk-grid" id="wk-grid"></div>
       <div class="wk-list" id="wk-list"></div>
     </div>
     <div class="cal-legend" id="cal-legend"></div>
     <div class="cal-detail" id="cal-detail"></div>
-    <div class="row tight" style="margin-top:24px">
-      <button class="btn ghost" id="btn-manual" type="button">Pick shifts that need cover</button>
-    </div>
   </section>
 
   <!-- ============ PICK SHIFTS ============ -->
@@ -514,7 +507,6 @@ var TOKEN = (location.hash.match(/t=([A-Za-z0-9_-]+)/) || [])[1] || "";
 var ME = null;      try { ME = localStorage.getItem("coach-name"); } catch (e) {}
 var MYBOXES = [];   try { MYBOXES = JSON.parse(localStorage.getItem("coach-boxes")||"[]")||[]; } catch (e) { MYBOXES=[]; }
 var SAVED_TAB = null;  try { SAVED_TAB = localStorage.getItem("coach-tab"); } catch (e) {}
-var SAVED_VIEW = null; try { SAVED_VIEW = localStorage.getItem("coach-calview"); } catch (e) {}
 
 /* ============================ state ============================ */
 var S = {
@@ -522,7 +514,7 @@ var S = {
   schedule:{shifts:[], importedAt:null},
   requests:[],
   tab:SAVED_TAB||"cal", sel:{},
-  calY:null, calM:null, calDay:null, calView:SAVED_VIEW||"week", weekStart:null,
+  calY:null, calM:null, calDay:null, calView:"week", weekStart:null,
   userPickedTab:!!SAVED_TAB, autoTabDone:false,
   editBoxes:false, boxesSynced:false, boxReqs:[]
 };
@@ -1434,70 +1426,6 @@ function markFor(x, r){
   if(r.status==="verified" && (x.coach||"").trim()===(r.claimedBy||"").trim()) return "";
   return " s-"+r.status;
 }
-function renderMonth(){
-  var sh=S.schedule.shifts||[];
-  var today=new Date(); today.setHours(0,0,0,0);
-  if(S.calY==null){
-    var first=sh.map(function(x){return x.date;}).filter(Boolean).sort()[0];
-    var base=(first && first>iso(today)) ? new Date(first+"T00:00:00") : today;
-    if(isNaN(base.getTime())) base=today;
-    S.calY=base.getFullYear(); S.calM=base.getMonth();
-  }
-  var y=S.calY, m=S.calM;
-  var monthNames=["January","February","March","April","May","June","July","August","September","October","November","December"];
-  $("cal-title").textContent=monthNames[m]+" "+y;
-  var firstDow=new Date(y,m,1).getDay();
-  var daysInMonth=new Date(y,m+1,0).getDate();
-
-  var inMonth=sh.filter(function(x){
-    return x.date && x.date.slice(0,4)==String(y) && x.date.slice(5,7)==pad(m+1) && coachMatch(x);
-  });
-  var locs={}; inMonth.forEach(function(x){ if(x.box) locs[x.box]=1; });
-  var nl=Object.keys(locs).length;
-  $("cal-sum").textContent = inMonth.length
-    ? (inMonth.length+" "+(inMonth.length===1?"class":"classes")+" this month across "+nl+" "+(nl===1?"location":"locations"))
-    : "Nothing scheduled this month.";
-
-  var g=$("cal-grid"); g.innerHTML="";
-  ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].forEach(function(d){
-    g.appendChild(el("div","cal-dow",d));
-  });
-  for(var b=0;b<firstDow;b++){ g.appendChild(el("div","cal-cell blank")); }
-
-  for(var d=1; d<=daysInMonth; d++){
-    var ds=y+"-"+pad(m+1)+"-"+pad(d);
-    var list=shiftsOn(ds);
-    var cell=el("button","cal-cell"); cell.type="button";
-    if(ds===iso(today)) cell.className+=" today";
-    if(ds===S.calDay) cell.className+=" sel";
-    if(!list.length) cell.className+=" off";
-    cell.setAttribute("aria-label", ds+", "+list.length+" classes");
-    cell.appendChild(el("div","cal-day",String(d)));
-
-    var chips=el("div","cal-chips");
-    var dots=el("div","cal-dots");
-    list.slice(0,3).forEach(function(x){
-      var r=requestFor(x);
-      var c=el("div","cal-chip"+markFor(x,r), normTime(x.time)+" "+slotName(x));
-      if(!x._open) c.style.background=slotColor(x);
-      chips.appendChild(c);
-      var dot=el("div","cal-dot"+markFor(x,requestFor(x))); if(!x._open) dot.style.background=slotColor(x); dots.appendChild(dot);
-    });
-    if(list.length>3){
-      chips.appendChild(el("div","cal-more","+"+(list.length-3)+" more"));
-      list.slice(3).forEach(function(x){
-        var dot=el("div","cal-dot"+markFor(x,requestFor(x))); if(!x._open) dot.style.background=slotColor(x); dots.appendChild(dot);
-      });
-    }
-    cell.appendChild(chips); cell.appendChild(dots);
-    (function(dsv){ cell.addEventListener("click",function(){
-      S.calDay = (S.calDay===dsv ? null : dsv); S.scrollToDay=!!S.calDay; renderCal();
-    }); })(ds);
-    g.appendChild(cell);
-  }
-
-  renderCalLegend(inMonth);
-}
 function renderCalLegend(scope){
   var lg=$("cal-legend"); lg.innerHTML="";
   if(canConfirm()){ var k0=el("div","cal-key"); var sw0=el("i"); sw0.style.background="var(--c0)"; k0.appendChild(sw0); k0.appendChild(el("span",null,"Class · "+scope.length)); lg.appendChild(k0); }
@@ -1524,12 +1452,8 @@ function renderCalLegend(scope){
   }
 }
 function renderCal(){
-  var week = S.calView==="week";
-  $("seg-month").setAttribute("aria-pressed", week?"false":"true");
-  $("seg-week").setAttribute("aria-pressed", week?"true":"false");
-  $("cal-grid").hidden = week;
-  $("wk-wrap").hidden = !week;
-  if(week) renderWeek(); else renderMonth();
+  $("wk-wrap").hidden = false;
+  renderWeek();
   renderCalDetail();
   if(S.scrollToDay){   // only on a tap, never on a background refresh
     S.scrollToDay=false;
@@ -1851,28 +1775,12 @@ function boot(){
   $("btn-backcal").addEventListener("click",function(){ setTab("cal"); });
   $("btn-backlog").addEventListener("click",function(){ setTab("cal"); });
   $("lnk-log").addEventListener("click",function(ev){ ev.preventDefault(); S.userPickedTab=true; setTab("log"); window.scrollTo(0,0); });
-  $("cal-prev").addEventListener("click",function(){
-    if(S.calView==="week"){ shiftWeek(-1); }
-    else { S.calM--; if(S.calM<0){ S.calM=11; S.calY--; } }
-    S.calDay=null; renderCal();
-  });
-  $("cal-next").addEventListener("click",function(){
-    if(S.calView==="week"){ shiftWeek(1); }
-    else { S.calM++; if(S.calM>11){ S.calM=0; S.calY++; } }
-    S.calDay=null; renderCal();
-  });
+  $("cal-prev").addEventListener("click",function(){ shiftWeek(-1); S.calDay=null; renderCal(); });
+  $("cal-next").addEventListener("click",function(){ shiftWeek(1);  S.calDay=null; renderCal(); });
   $("cal-today").addEventListener("click",function(){
     var t=new Date();
     S.calY=t.getFullYear(); S.calM=t.getMonth();
     S.weekStart=iso(sundayOf(t)); S.calDay=iso(t); renderCal();
-  });
-  Array.prototype.forEach.call(document.querySelectorAll("#cal-seg button"),function(b){
-    b.addEventListener("click",function(){
-      S.calView=b.dataset.view;
-      try{ localStorage.setItem("coach-calview", S.calView); }catch(e){}
-      if(S.calView==="week" && !S.weekStart && S.calDay) S.weekStart=iso(sundayOf(new Date(S.calDay+"T00:00:00")));
-      renderCal();
-    });
   });
   ["f-coach","f-from","f-to"].forEach(function(id){
     $(id).addEventListener("change",function(){ S.sel={}; renderPreview(); });
