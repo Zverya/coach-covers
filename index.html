@@ -62,13 +62,19 @@ body{
 /* ---------- header ---------- */
 .masthead{padding-block:22px 14px; display:flex; align-items:center; gap:12px}
 .masthead > div{flex:1 1 auto}
-.idbtns{display:flex; gap:6px; flex:none; margin-left:auto}
-.idpill{appearance:none; border:1px solid var(--line); background:var(--surface); color:var(--ink);
-  font:inherit; font-size:12px; font-weight:600; letter-spacing:.04em; line-height:1;
-  padding:9px 11px; border-radius:999px; cursor:pointer; box-shadow:var(--shadow); white-space:nowrap}
-.idpill.box{color:var(--ink-2)}
-.idpill:hover{border-color:var(--ink-3)}
-.idpill:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+.profile{position:relative; flex:none; margin-left:auto; align-self:flex-start}
+.avatar{appearance:none; width:40px; height:40px; border-radius:50%; border:1px solid var(--line);
+  background:var(--accent); color:var(--accent-ink); font:inherit; font-size:13px; font-weight:600;
+  letter-spacing:.03em; cursor:pointer; box-shadow:var(--shadow); display:flex; align-items:center; justify-content:center}
+.avatar:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+.menu{position:absolute; right:0; top:46px; min-width:230px; background:var(--surface); border:1px solid var(--line);
+  border-radius:10px; box-shadow:0 8px 24px rgba(23,26,36,.14); padding:6px; z-index:30}
+.menu .hd{padding:8px 10px 10px; font-size:12.5px; color:var(--ink-2); border-bottom:1px solid var(--line); margin-bottom:4px; line-height:1.4}
+.menu .hd b{display:block; color:var(--ink); font-size:13.5px}
+.menu button{display:block; width:100%; text-align:left; appearance:none; border:0; background:none; font:inherit;
+  font-size:13.5px; color:var(--ink); padding:9px 10px; border-radius:7px; cursor:pointer}
+.menu button:hover{background:var(--surface-2)}
+.menu button:focus-visible{outline:2px solid var(--accent); outline-offset:-2px}
 h1{
   font-family:Oswald,"IBM Plex Sans",sans-serif; font-weight:600;
   font-size:26px; letter-spacing:.02em; text-transform:uppercase;
@@ -400,9 +406,8 @@ button.stat:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
   <div class="masthead">
     <div style="min-width:0">
       <h1>Coach Cover Board</h1>
-      <p class="sub" id="whoami" hidden></p>
     </div>
-    <div class="idbtns" id="idbtns"></div>
+    <div class="profile" id="profile"></div>
     <span class="modechip" id="modechip" hidden>Loading</span>
   </div>
 
@@ -613,8 +618,9 @@ function inScope(x){
   if(!(x.coach||"").trim()) return false;   // 24/7 and open-gym slots have no coach — nothing to cover
   if(isAdmin()) return true;
   if(isBoxAdmin()) return (x.box||"").trim()===(adminBox()||"").trim();
-  return (x.coach||"").trim()===ME;
+  return (x.coach||"").trim()===ME && inMyBoxes(x.box);
 }
+function inMyBoxes(box){ return !MYBOXES.length || MYBOXES.indexOf((box||"").trim())>=0; }
 
 /* ============================ data ============================ */
 function rpc(fn,args){
@@ -833,6 +839,7 @@ function renderAll(){
   else if(S.err==="unknown_board"){ gate("This link doesn't work","The code isn't recognised. Ask for a fresh link."); }
   else if(S.err){ gate("Something went wrong","Try again in a moment."); }
   else if(!ME && !canConfirm()){ pickName(); }
+  else if(S.pickName){ if(MYBOXES.length) pickNameOnly(); else { ME=null; S.pickName=false; pickName(); } }
   else if(S.editBoxes){ boxEditor(); }
   else { g.hidden=true; m.hidden=false; $("tab-admin").hidden=!canConfirm(); setTab(S.tab); render(); return; }
   g.hidden=false; m.hidden=true;
@@ -855,22 +862,31 @@ function initials(n){
   return String(n||"").trim().split(/\s+/).filter(Boolean).slice(0,3).map(function(w){ return w.charAt(0); }).join("").toUpperCase() || "?";
 }
 function renderMode(){
-  var c=$("modechip"), b=$("idbtns"); b.innerHTML="";
+  var c=$("modechip"), p=$("profile"); p.innerHTML="";
   if(canConfirm()){   // an admin link is a box, not a person
     c.hidden=false; c.className="modechip live";
     c.textContent = isAdmin() ? "All boxes" : shortBox(adminBox()||"Box")+" admin";
     return;
   }
   c.hidden=true;
-  var me=el("button","idpill",initials(ME)); me.type="button";
-  me.title=ME+" — tap to change who you are"; me.setAttribute("aria-label","You are "+ME+". Change name");
-  me.addEventListener("click",function(){ ME=null; try{ localStorage.removeItem("coach-name"); }catch(e){} renderAll(); });
-  b.appendChild(me);
-  var boxes=(MYBOXES.length ? MYBOXES : myBoxesSeen()).map(function(x){ return initials(shortBox(x)); }).join("·") || "+";
-  var bx=el("button","idpill box",boxes); bx.type="button";
-  bx.title=(MYBOXES.length ? MYBOXES.map(shortBox).join(", ") : "Your boxes")+" — tap to change"; bx.setAttribute("aria-label","Your boxes. Change");
-  bx.addEventListener("click",function(){ S.editBoxes=true; renderAll(); });
-  b.appendChild(bx);
+  var av=el("button","avatar",initials(ME)); av.type="button";
+  av.setAttribute("aria-label","Profile: "+ME); av.setAttribute("aria-haspopup","menu"); av.setAttribute("aria-expanded","false");
+  var m=el("div","menu"); m.hidden=true; m.setAttribute("role","menu");
+  var hd=el("div","hd"); hd.appendChild(el("b",null,ME));
+  hd.appendChild(document.createTextNode(MYBOXES.length ? MYBOXES.map(shortBox).join(" · ") : "No boxes picked yet"));
+  m.appendChild(hd);
+  function item(label,fn){ var b=el("button",null,label); b.type="button"; b.setAttribute("role","menuitem");
+    b.addEventListener("click",function(){ close(); fn(); }); m.appendChild(b); }
+  item("Not you? Pick another name", function(){ S.pickName=true; renderAll(); });
+  item("Switch or add a box", function(){ S.editBoxes=true; renderAll(); });
+  function close(){ m.hidden=true; av.setAttribute("aria-expanded","false"); document.removeEventListener("click",away); }
+  function away(ev){ if(!p.contains(ev.target)) close(); }
+  av.addEventListener("click",function(ev){
+    ev.stopPropagation();
+    if(m.hidden){ m.hidden=false; av.setAttribute("aria-expanded","true"); setTimeout(function(){ document.addEventListener("click",away); },0); }
+    else close();
+  });
+  p.appendChild(av); p.appendChild(m);
 }
 function counts(){
   var c={open:0,claimed:0,sent:0,verified:0,mismatch:0,cancelled:0,urgent:0};
@@ -946,7 +962,7 @@ function scopedRequests(){
   if(canConfirm()) return S.requests.slice();
   var takeable=openForMe();
   return S.requests.filter(function(r){
-    return isMine(r) || r.claimedBy===ME || takeable.indexOf(r)>=0;
+    return inMyBoxes(r.box) && (isMine(r) || r.claimedBy===ME || takeable.indexOf(r)>=0);
   });
 }
 function visibleRequests(){
@@ -1357,14 +1373,13 @@ function boxList(){
   all.forEach(function(b){ if(out.indexOf(b)<0) out.push(b); });
   return out;
 }
-function myBoxesSeen(){ // where your own classes are, plus whatever you ticked
+function myBoxesSeen(){ // the boxes you ticked; failing that, wherever your classes are
+  if(MYBOXES.length) return MYBOXES.slice().sort(function(a,b){ return a.localeCompare(b); });
   var mine=[];
   (S.schedule.shifts||[]).forEach(function(x){
     if(x.coach!==ME) return; var b=(x.box||"").trim(); if(b && mine.indexOf(b)<0) mine.push(b);
   });
-  mine.sort(function(a,b){ return a.localeCompare(b); });
-  MYBOXES.forEach(function(b){ if(mine.indexOf(b)<0) mine.push(b); });
-  return mine;
+  return mine.sort(function(a,b){ return a.localeCompare(b); });
 }
 /* On an admin link every class is the same box, so the slot shows and colours the coach instead. */
 function coachList(){
@@ -1396,7 +1411,7 @@ function shiftsOn(ds){
     list.push({k:r.k, date:r.date, time:r.time, box:r.box, klass:r.klass, coach:r.originalCoach, _open:true});
   });
   if(ME) S.requests.forEach(function(r){   // and the ones you have taken, until Arbox lists them under your name
-    if(r.date!==ds || r.claimedBy!==ME || r.status==="open" || r.status==="cancelled") return;
+    if(r.date!==ds || r.claimedBy!==ME || r.status==="open" || r.status==="cancelled" || !inMyBoxes(r.box)) return;
     if(list.some(function(x){ return key(x)===r.k; })) return;
     list.push({k:r.k, date:r.date, time:r.time, box:r.box, klass:r.klass, coach:r.originalCoach, _cover:true});
   });
@@ -1754,6 +1769,30 @@ function pickName(){
     renderAll();
   });
   g.appendChild(go); $("gate").appendChild(g);
+}
+function pickNameOnly(){
+  var g=el("div","gate");
+  g.appendChild(el("h1",null,"Who are you?"));
+  g.appendChild(el("p",null,"Coaches at "+MYBOXES.map(shortBox).join(", ")+". To pick a different box, use Switch or add a box."));
+  var set={};
+  (S.schedule.shifts||[]).forEach(function(x){ if(x.coach && MYBOXES.indexOf(x.box)>=0) set[x.coach]=1; });
+  var names=Object.keys(set).sort(function(a,b){ return a.localeCompare(b); });
+  g.appendChild(el("div","boxlabel","Your name"));
+  var sel=el("select");
+  var ph=el("option",null,"Pick your name…"); ph.value=""; sel.appendChild(ph);
+  names.forEach(function(c){ var o=el("option",null,c); o.value=c; sel.appendChild(o); });
+  if(names.indexOf(ME)>=0) sel.value=ME;
+  g.appendChild(sel);
+  var go=el("button","btn primary","That's me"); go.type="button"; go.style.marginTop="12px";
+  go.addEventListener("click",function(){
+    if(!sel.value){ toast("Pick your name"); return; }
+    ME=sel.value; try{ localStorage.setItem("coach-name",ME); }catch(e){}
+    S.pickName=false; S.boxesSynced=true; saveBoxes(); renderAll();
+  });
+  var back=el("button","btn ghost","Cancel"); back.type="button"; back.style.marginTop="12px"; back.style.marginLeft="6px";
+  back.addEventListener("click",function(){ S.pickName=false; renderAll(); });
+  g.appendChild(go); g.appendChild(back);
+  $("gate").appendChild(g);
 }
 function boxEditor(){
   var g=el("div","gate");
