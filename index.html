@@ -353,6 +353,15 @@ hr.sep{border:0; border-top:1px solid var(--line); margin-block:22px}
 .boxrow input{width:17px; height:17px; accent-color:var(--accent); cursor:pointer}
 #whoami a{color:var(--accent)}
 .tab[hidden]{display:none}
+/* a cover you could take: the box's slot, outlined instead of filled */
+.wk-ev.open,.cal-chip.open{background:var(--ok-bg)!important; color:var(--ok); border:1.5px dashed var(--ok)}
+.wk-row.open i,.cal-dot.open{background:var(--ok-bg)!important; border:1.5px dashed var(--ok); box-sizing:border-box}
+.wk-row.open .n{color:var(--ok)}
+.boxhead{display:flex; align-items:center; gap:10px; margin:18px 0 8px}
+.boxhead h3{font-family:Oswald,sans-serif; font-weight:500; text-transform:uppercase; letter-spacing:.05em;
+  font-size:13px; margin:0; color:var(--ink)}
+.boxhead .n{font-size:12px; color:var(--ink-2)}
+.boxhead .btn{margin-left:auto}
 </style>
 </head>
 <body>
@@ -474,7 +483,7 @@ var S = {
   loading:true, err:null, data:null, busy:null,
   schedule:{shifts:[], importedAt:null},
   requests:[],
-  tab:SAVED_TAB||"cal", filter:"all", sel:{},
+  tab:SAVED_TAB||"cal", sel:{},
   calY:null, calM:null, calDay:null, calView:SAVED_VIEW||"week", weekStart:null, calCoach:null,
   userPickedTab:!!SAVED_TAB, autoTabDone:false,
   editBoxes:false, boxesSynced:false, boxReqs:[]
@@ -710,6 +719,16 @@ function resolveBox(id,status){
   }).catch(function(){ toast("Couldn't reach the board."); });
 }
 
+/* Open covers this person could take: at the boxes they coach at, not their own. */
+function openForMe(){
+  if(canConfirm()) return S.requests.filter(function(r){ return r.status==="open"; });
+  var mine=myBoxesSeen();
+  return S.requests.filter(function(r){
+    if(r.status!=="open" || isMine(r)) return false;
+    return !mine.length || mine.indexOf((r.box||"").trim())>=0;
+  });
+}
+
 /* ============================ roster ============================ */
 function coachNames(){
   var seen={}, out=[];
@@ -805,37 +824,33 @@ function renderTopAlert(){
   }
 }
 
-function renderFilters(){
-  var f=$("filters"); f.innerHTML="";
-  var opts=[["all","Everything"],["open","Needs cover"],["pending","Waiting on admin"],["verified","Confirmed"],["mismatch","Not updated"]];
-  opts.forEach(function(o){
-    var b=el("button","fchip",o[1]);
-    b.type="button";
-    b.setAttribute("aria-pressed", S.filter===o[0] ? "true":"false");
-    b.addEventListener("click",function(){ S.filter=o[0]; renderFilters(); renderBoard(); });
-    f.appendChild(b);
-  });
-}
-function visibleRequests(){
-  return S.requests.filter(function(r){
-    if(S.filter==="all") return r.status!=="cancelled";
-    if(S.filter==="pending") return r.status==="claimed"||r.status==="sent";
-    return r.status===S.filter;
-  }).sort(sortByTime);
-}
 function renderBoard(){
-  renderFilters();
+  $("filters").innerHTML="";
   var w=$("board"); w.innerHTML="";
-  var list=visibleRequests();
-  if(!list.length){
+  var open=S.requests.filter(function(r){ return r.status==="open" && (canConfirm() || isMine(r)); });
+  openForMe().forEach(function(r){ if(open.indexOf(r)<0) open.push(r); });
+  if(!open.length){
     var e=el("div","empty");
-    e.appendChild(el("b",null, S.requests.length? "Nothing in this view":"No cover requests yet"));
+    e.appendChild(el("b",null, S.requests.length ? "Nothing open right now" : "No cover requests yet"));
     e.appendChild(el("div",null, S.requests.length
-      ? "Try another filter."
+      ? "Every request has been taken. Claimed and confirmed ones are under Record."
       : "Your "+S.schedule.shifts.length+" shifts are loaded. Open Schedule and tap a class, or pick several at once, to ask for cover."));
     w.appendChild(e);
   }
-  list.forEach(function(r){ w.appendChild(reqCard(r)); });
+  boxList().forEach(function(box){
+    var list=open.filter(function(r){ return (r.box||"").trim()===box; }).sort(sortByTime);
+    if(!list.length) return;
+    var hd=el("div","boxhead");
+    hd.appendChild(el("h3",null,shortBox(box)));
+    hd.appendChild(el("span","n", list.length+" "+(list.length===1?"class":"classes")));
+    var cp=el("button","btn","Copy for WhatsApp"); cp.type="button";
+    cp.addEventListener("click",function(){ copyText(groupMessage(list, box)); });
+    hd.appendChild(cp);
+    w.appendChild(hd);
+    var l=el("div","list");
+    list.forEach(function(r){ l.appendChild(reqCard(r)); });
+    w.appendChild(l);
+  });
   renderBoardTools();
 }
 function reqCard(r){
@@ -958,33 +973,25 @@ function reqCard(r){
 }
 function renderBoardTools(){
   var w=$("boardtools"); w.innerHTML="";
-  var open=S.requests.filter(function(r){ return r.status==="open"; });
   var pend=S.requests.filter(function(r){ return r.status==="claimed"||r.status==="sent"||r.status==="mismatch"; });
-  if(!open.length && !pend.length) return;
+  if(!pend.length) return;
   var hr=el("hr","sep"); w.appendChild(hr);
   var row=el("div","row tight");
-  if(open.length){
-    var b1=el("button","btn primary","Copy all "+open.length+" open shifts for the group"); b1.type="button";
-    b1.addEventListener("click",function(){ copyText(groupMessage(open)); });
-    row.appendChild(b1);
-  }
-  if(pend.length){
-    var b2=el("button","btn","Copy change list for the admin ("+pend.length+")"); b2.type="button";
-    b2.addEventListener("click",function(){ copyText(adminMessage(pend)); });
-    row.appendChild(b2);
-  }
+  var b2=el("button","btn","Copy change list for the admin ("+pend.length+")"); b2.type="button";
+  b2.addEventListener("click",function(){ copyText(adminMessage(pend)); });
+  row.appendChild(b2);
   w.appendChild(row);
-  w.appendChild(el("p","foot","Paste the first into the coaches' group; send the second to whoever edits the schedule. The nightly check confirms it once they say it's done."));
+  w.appendChild(el("p","foot","Send this to whoever edits the schedule. The nightly check confirms it once they say it's done."));
 }
 
 /* ---------- message builders ---------- */
-function groupMessage(rs){
+function groupMessage(rs, box){
   var list=[].concat(rs).sort(sortByTime);
   var lines=[];
-  lines.push(list.length===1 ? "Cover needed:" : "Cover needed for "+list.length+" classes:");
+  lines.push((list.length===1 ? "Cover needed" : "Cover needed for "+list.length+" classes")+(box ? " at "+shortBox(box) : "")+":");
   lines.push("");
   list.forEach(function(r){
-    lines.push("• "+when(r)+" — "+(r.klass||"class")+" @ "+r.box+" (was "+(r.originalCoach||"unassigned")+")");
+    lines.push("• "+when(r)+" — "+(r.klass||"class")+(box ? "" : " @ "+r.box)+" (was "+(r.originalCoach||"unassigned")+")");
   });
   lines.push("");
   lines.push("Take it on the board — "+location.href.split("#")[0]+" — not just \"I can\". It only counts once it's on the board and the admin has changed it in the system.");
@@ -1192,15 +1199,18 @@ function boxList(){
     if(b && !seen[b]){ seen[b]=1; all.push(b); }
   });
   all.sort(function(a,b){ return a.localeCompare(b); });
+  var out=myBoxesSeen().filter(function(b){ return all.indexOf(b)>=0; });
+  all.forEach(function(b){ if(out.indexOf(b)<0) out.push(b); });
+  return out;
+}
+function myBoxesSeen(){ // where your own classes are, plus whatever you ticked
   var mine=[];
   (S.schedule.shifts||[]).forEach(function(x){
     if(x.coach!==ME) return; var b=(x.box||"").trim(); if(b && mine.indexOf(b)<0) mine.push(b);
   });
   mine.sort(function(a,b){ return a.localeCompare(b); });
-  MYBOXES.forEach(function(b){ if(mine.indexOf(b)<0 && all.indexOf(b)>=0) mine.push(b); });
-  var out=mine.slice();
-  all.forEach(function(b){ if(out.indexOf(b)<0) out.push(b); });
-  return out;
+  MYBOXES.forEach(function(b){ if(mine.indexOf(b)<0) mine.push(b); });
+  return mine;
 }
 function boxColor(name){
   var i=boxList().indexOf((name||"").trim());
@@ -1217,9 +1227,17 @@ function coachMatch(x){
   return !S.calCoach || (x.coach||"").trim()===S.calCoach;
 }
 function shiftsOn(ds){
-  return (S.schedule.shifts||[]).filter(function(x){ return x.date===ds && coachMatch(x); })
-    .sort(function(a,b){ return normTime(a.time).localeCompare(normTime(b.time)); });
+  var list=(S.schedule.shifts||[]).filter(function(x){ return x.date===ds && coachMatch(x); });
+  if(S.calCoach===ME){   // your view also carries the open covers you could pick up
+    openForMe().forEach(function(r){
+      if(r.date!==ds) return;
+      if(list.some(function(x){ return key(x)===r.k; })) return;
+      list.push({k:r.k, date:r.date, time:r.time, box:r.box, klass:r.klass, coach:r.originalCoach, _open:true});
+    });
+  }
+  return list.sort(function(a,b){ return normTime(a.time).localeCompare(normTime(b.time)); });
 }
+function markFor(x, r){ return x._open ? " open" : (r ? " covered" : ""); }
 function renderMonth(){
   var sh=S.schedule.shifts||[];
   var today=new Date(); today.setHours(0,0,0,0);
@@ -1264,15 +1282,15 @@ function renderMonth(){
     var dots=el("div","cal-dots");
     list.slice(0,3).forEach(function(x){
       var r=requestFor(x);
-      var c=el("div","cal-chip"+(r?" covered":""), normTime(x.time)+" "+shortBox(x.box));
-      c.style.background=boxColor(x.box);
+      var c=el("div","cal-chip"+markFor(x,r), normTime(x.time)+" "+shortBox(x.box));
+      if(!x._open) c.style.background=boxColor(x.box);
       chips.appendChild(c);
-      var dot=el("div","cal-dot"); dot.style.background=boxColor(x.box); dots.appendChild(dot);
+      var dot=el("div","cal-dot"+(x._open?" open":"")); if(!x._open) dot.style.background=boxColor(x.box); dots.appendChild(dot);
     });
     if(list.length>3){
       chips.appendChild(el("div","cal-more","+"+(list.length-3)+" more"));
       list.slice(3).forEach(function(x){
-        var dot=el("div","cal-dot"); dot.style.background=boxColor(x.box); dots.appendChild(dot);
+        var dot=el("div","cal-dot"+(x._open?" open":"")); if(!x._open) dot.style.background=boxColor(x.box); dots.appendChild(dot);
       });
     }
     cell.appendChild(chips); cell.appendChild(dots);
@@ -1293,6 +1311,10 @@ function renderCalLegend(scope){
     k.appendChild(el("span",null, shortBox(b)+(n?" · "+n:"")));
     lg.appendChild(k);
   });
+  if(S.calCoach===ME && openForMe().length){
+    var k2=el("div","cal-key"); var sw2=el("i"); sw2.style.background="var(--ok-bg)"; sw2.style.border="1.5px dashed var(--ok)"; sw2.style.boxSizing="border-box";
+    k2.appendChild(sw2); k2.appendChild(el("span",null,"Needs cover — you could take it")); lg.appendChild(k2);
+  }
 }
 function renderCoachPicker(){
   var sel=$("cal-coach"); if(!sel) return;
@@ -1374,13 +1396,13 @@ function renderWeek(){
     }
     shiftsOn(ds).forEach(function(x){
       var r=requestFor(x);
-      var ev=el("button","wk-ev"+(r?" covered":"")); ev.type="button";
-      ev.style.background=boxColor(x.box);
+      var ev=el("button","wk-ev"+markFor(x,r)); ev.type="button";
+      if(!x._open) ev.style.background=boxColor(x.box);
       ev.style.top=(PAD+((mins(x.time)-minH*60)/60)*ROW)+"px";
       ev.style.height=(ROW-3)+"px";
       ev.appendChild(el("b",null,normTime(x.time)));
       ev.appendChild(el("span",null,shortBox(x.box)));
-      ev.title=normTime(x.time)+" "+(x.klass||"")+" — "+x.box;
+      ev.title=normTime(x.time)+" "+(x.klass||"")+" — "+x.box+(x._open?"  (needs cover — you could take it)":"");
       ev.addEventListener("click",function(){ S.calDay=ds; renderCal(); });
       col.appendChild(ev);
     });
@@ -1396,8 +1418,8 @@ function renderWeek(){
     if(!list.length){ wrap.appendChild(el("div","wk-none","—")); }
     list.forEach(function(x){
       var r=requestFor(x);
-      var row=el("button","wk-row"+(r?" covered":"")); row.type="button";
-      var sw=el("i"); sw.style.background=boxColor(x.box); row.appendChild(sw);
+      var row=el("button","wk-row"+markFor(x,r)); row.type="button";
+      var sw=el("i"); if(!x._open) sw.style.background=boxColor(x.box); row.appendChild(sw);
       row.appendChild(el("span","t",normTime(x.time)));
       row.appendChild(el("span","n",(x.klass||"class")+" · "+shortBox(x.box)));
       row.addEventListener("click",function(){ S.calDay=ds; renderCal(); });
@@ -1419,7 +1441,8 @@ function renderCalDetail(){
   var wrap=el("div","list");
   list.forEach(function(x){
     var r=requestFor(x);
-    var card=el("div","req"+(r?" s-"+r.status:""));
+    if(r){ wrap.appendChild(reqCard(r)); return; }
+    var card=el("div","req");
     var top=el("div","req-top");
     top.appendChild(el("span","when", normTime(x.time)));
     top.appendChild(el("span","box", shortBox(x.box)));
