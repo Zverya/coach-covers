@@ -168,7 +168,8 @@ h1{
 .urgent{color:var(--crit); font-weight:600}
 .req-actions{display:flex; gap:6px; flex-wrap:wrap; margin-top:10px}
 .claimform{display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; align-items:center}
-.claimform input{flex:1 1 170px; min-width:0; font-size:13.5px; padding:7px 10px}
+.claimform input,.claimform select{flex:1 1 170px; min-width:0; font-size:13.5px; padding:7px 10px;
+  font-family:inherit; color:var(--ink); background:var(--surface); border:1px solid var(--line); border-radius:8px}
 .claimform .btn{flex:0 0 auto}
 .inline-warn{
   margin-top:9px; padding:10px 11px; border-radius:8px;
@@ -780,6 +781,16 @@ function announceNews(){
   }
 }
 
+/* Coaches who teach at a given box, from the schedule. */
+function coachesAt(box){
+  var seen={}, out=[];
+  (S.schedule.shifts||[]).forEach(function(x){
+    if((x.box||"").trim()!==(box||"").trim()) return;
+    var c=(x.coach||"").trim(); if(c && !seen[c]){ seen[c]=1; out.push(c); }
+  });
+  return out.sort(function(a,b){ return a.localeCompare(b); });
+}
+
 /* ============================ roster ============================ */
 function coachNames(){
   var seen={}, out=[];
@@ -952,18 +963,24 @@ function reqCard(r){
   /* --- the "who took it" form (admins record on someone's behalf) --- */
   if(r._claiming){
     var form=el("div","claimform");
-    var inp=el("input"); inp.type="text"; inp.id="claim-"+r.id;
-    inp.setAttribute("list","coachlist");
-    inp.placeholder="Who is covering it?";
-    inp.value=r._pendingWho||"";
-    inp.autocomplete="off";
+    var names=coachesAt(r.box).filter(function(c){ return c!==(r.originalCoach||"").trim(); });
+    var sel=el("select"); sel.id="claim-"+r.id;
+    var ph=el("option",null,"Who is covering it?"); ph.value=""; sel.appendChild(ph);
+    names.forEach(function(c){ var o=el("option",null,c); o.value=c; sel.appendChild(o); });
+    var oth=el("option",null,"Someone else\u2026"); oth.value="__other"; sel.appendChild(oth);
+    var inp=el("input"); inp.type="text"; inp.placeholder="Their name"; inp.autocomplete="off"; inp.hidden=true;
+    var pend=(r._pendingWho||"").trim();
+    if(pend && names.indexOf(pend)>=0) sel.value=pend;
+    else if(pend){ sel.value="__other"; inp.value=pend; inp.hidden=false; }
+    function who(){ return sel.value==="__other" ? inp.value : sel.value; }
+    sel.addEventListener("change",function(){ inp.hidden = sel.value!=="__other"; if(!inp.hidden) inp.focus(); });
     inp.addEventListener("keydown",function(ev){
-      if(ev.key==="Enter"){ ev.preventDefault(); attemptClaim(r, inp.value); }
+      if(ev.key==="Enter"){ ev.preventDefault(); attemptClaim(r, who()); }
       if(ev.key==="Escape"){ r._claiming=false; r._pendingWho=null; render(); }
     });
-    form.appendChild(inp);
+    form.appendChild(sel); form.appendChild(inp);
     var go=el("button","btn primary","Record"); go.type="button";
-    go.addEventListener("click",function(){ attemptClaim(r, inp.value); });
+    go.addEventListener("click",function(){ attemptClaim(r, who()); });
     form.appendChild(go);
     var no=el("button","btn ghost","Cancel"); no.type="button";
     no.addEventListener("click",function(){ r._claiming=false; r._pendingWho=null; r._conflict=null; render(); });
@@ -1024,10 +1041,10 @@ function reqCard(r){
   if(r.status==="claimed"){
     if(canConfirm()) btn("Updated in Arbox","primary",function(){ doConfirm(r,false); });
     if(r.claimedBy===ME) btn("Undo claim",null,function(){ doRelease(r); });
-    btn("Copy for admin",null,function(){ copyText(adminMessage([r])); });
+    if(!canConfirm()) btn("Copy for the box admin",null,function(){ copyText(adminMessage([r])); });
   }
   if(r.status==="sent"||r.status==="mismatch"){
-    btn("Copy for admin",null,function(){ copyText(adminMessage([r])); });
+    if(!canConfirm()) btn("Copy for the box admin",null,function(){ copyText(adminMessage([r])); });
     if(canConfirm()){
       if(r.status==="mismatch") btn("Fixed it — updated now","primary",function(){ doConfirm(r,false); });
       else btn("Not actually done","ghost",function(){ doConfirm(r,true); });
@@ -1042,14 +1059,14 @@ function reqCard(r){
 function renderBoardTools(){
   var w=$("boardtools"); w.innerHTML="";
   var pend=S.requests.filter(function(r){ return r.status==="claimed"||r.status==="sent"||r.status==="mismatch"; });
-  if(!pend.length) return;
+  if(!pend.length || canConfirm()) return;
   var hr=el("hr","sep"); w.appendChild(hr);
   var row=el("div","row tight");
-  var b2=el("button","btn","Copy change list for the admin ("+pend.length+")"); b2.type="button";
+  var b2=el("button","btn","Copy change list for the box admin ("+pend.length+")"); b2.type="button";
   b2.addEventListener("click",function(){ copyText(adminMessage(pend)); });
   row.appendChild(b2);
   w.appendChild(row);
-  w.appendChild(el("p","foot","Send this to whoever edits the schedule. The nightly check confirms it once they say it's done."));
+  w.appendChild(el("p","foot","Send this to the box admin, who moves the classes in Arbox. The nightly check confirms it once they say it's done."));
 }
 
 /* ---------- message builders ---------- */
@@ -1290,7 +1307,7 @@ function coachList(){
 }
 function coachColor(name){ var i=coachList().indexOf((name||"").trim()); return "var(--c"+(i<0?0:i%6)+")"; }
 function slotName(x){ return canConfirm() ? ((x.coach||"").trim()||"—") : shortBox(x.box); }
-function slotColor(x){ return canConfirm() ? coachColor(x.coach) : boxColor(x.box); }
+function slotColor(x){ return canConfirm() ? "var(--c0)" : boxColor(x.box); }
 function boxColor(name){
   var i=boxList().indexOf((name||"").trim());
   return "var(--c" + (i<0 ? 0 : i%6) + ")";
@@ -1379,7 +1396,8 @@ function renderMonth(){
 }
 function renderCalLegend(scope){
   var lg=$("cal-legend"); lg.innerHTML="";
-  (canConfirm() ? coachList() : boxList()).forEach(function(b){
+  if(canConfirm()){ var k0=el("div","cal-key"); var sw0=el("i"); sw0.style.background="var(--c0)"; k0.appendChild(sw0); k0.appendChild(el("span",null,"Class · "+scope.length)); lg.appendChild(k0); }
+  (canConfirm() ? [] : boxList()).forEach(function(b){
     var n=scope.filter(function(x){ return (canConfirm() ? (x.coach||"") : (x.box||"")).trim()===b; }).length;
     var k=el("div","cal-key");
     var sw=el("i"); sw.style.background=canConfirm() ? coachColor(b) : boxColor(b); k.appendChild(sw);
