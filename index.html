@@ -509,6 +509,8 @@ var S = {
   editBoxes:false, boxesSynced:false, boxReqs:[]
 };
 
+S.filter = "open";   // Covers opens on what needs a coach; the chips widen it
+
 var STATUS_LABEL = {
   open:"Needs cover", claimed:"Claimed", sent:"Admin updated",
   verified:"Confirmed", mismatch:"Not updated", cancelled:"Cancelled"
@@ -911,31 +913,55 @@ function renderTopAlert(){
   }
 }
 
+function renderFilters(){
+  var f=$("filters"); f.innerHTML="";
+  var opts=[["open","Needs cover"],["pending","Waiting on admin"],["verified","Confirmed"],["mismatch","Not updated"],["all","Everything"]];
+  opts.forEach(function(o){
+    var b=el("button","fchip",o[1]);
+    b.type="button";
+    b.setAttribute("aria-pressed", S.filter===o[0] ? "true":"false");
+    b.addEventListener("click",function(){ S.filter=o[0]; renderFilters(); renderBoard(); });
+    f.appendChild(b);
+  });
+}
+function visibleRequests(){
+  var base=S.requests.filter(function(r){
+    if(canConfirm()) return true;
+    return isMine(r) || r.claimedBy===ME || (r.status==="open" && openForMe().indexOf(r)>=0);
+  });
+  return base.filter(function(r){
+    if(S.filter==="all") return r.status!=="cancelled";
+    if(S.filter==="pending") return r.status==="claimed"||r.status==="sent";
+    return r.status===S.filter;
+  }).sort(sortByTime);
+}
 function renderBoard(){
-  $("filters").innerHTML="";
+  renderFilters();
   var w=$("board"); w.innerHTML="";
-  var open=S.requests.filter(function(r){ return r.status==="open" && (canConfirm() || isMine(r)); });
-  openForMe().forEach(function(r){ if(open.indexOf(r)<0) open.push(r); });
-  if(!open.length){
+  var list=visibleRequests();
+  if(!list.length){
     var e=el("div","empty");
-    e.appendChild(el("b",null, S.requests.length ? "Nothing open right now" : "No cover requests yet"));
-    e.appendChild(el("div",null, S.requests.length
-      ? "Every request has been taken. Claimed and confirmed ones are under Record."
-      : "Your "+S.schedule.shifts.length+" shifts are loaded. Open Schedule and tap a class, or pick several at once, to ask for cover."));
+    e.appendChild(el("b",null, S.filter==="open" ? "Nothing needs a coach right now" : "Nothing in this view"));
+    e.appendChild(el("div",null, S.filter==="open"
+      ? (S.requests.length ? "Every request has been taken. The chips above show the rest." : "Your "+S.schedule.shifts.length+" shifts are loaded. Open Schedule and tap a class, or pick several at once, to ask for cover.")
+      : "Try another chip."));
     w.appendChild(e);
   }
   boxList().forEach(function(box){
-    var list=open.filter(function(r){ return (r.box||"").trim()===box; }).sort(sortByTime);
-    if(!list.length) return;
+    var group=list.filter(function(r){ return (r.box||"").trim()===box; });
+    if(!group.length) return;
+    var open=group.filter(function(r){ return r.status==="open"; });
     var hd=el("div","boxhead");
     hd.appendChild(el("h3",null,shortBox(box)));
-    hd.appendChild(el("span","n", list.length+" "+(list.length===1?"class":"classes")));
-    var cp=el("button","btn","Copy for WhatsApp"); cp.type="button";
-    cp.addEventListener("click",function(){ copyText(groupMessage(list, box)); });
-    hd.appendChild(cp);
+    hd.appendChild(el("span","n", group.length+" "+(group.length===1?"class":"classes")));
+    if(open.length){
+      var cp=el("button","btn","Copy for WhatsApp"); cp.type="button";
+      cp.addEventListener("click",function(){ copyText(groupMessage(open, box)); });
+      hd.appendChild(cp);
+    }
     w.appendChild(hd);
     var l=el("div","list");
-    list.forEach(function(r){ l.appendChild(reqCard(r)); });
+    group.forEach(function(r){ l.appendChild(reqCard(r)); });
     w.appendChild(l);
   });
   renderBoardTools();
@@ -1044,7 +1070,6 @@ function reqCard(r){
       var clash=conflictFor(ME, r);
       btn("I'll take it","primary",function(){ if(clash){ attemptClaim(r, ME); } else doClaim(r, ME); });
     }
-    btn("Copy for the group",null,function(){ copyText(groupMessage(r)); });
   }
   if(r.status==="claimed"){
     if(canConfirm()) btn("Updated in Arbox","primary",function(){ doConfirm(r,false); });
