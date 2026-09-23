@@ -464,10 +464,10 @@ button.stat:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
     </div>
     <div class="panel-head">
       <h2>Pick the shifts that need cover</h2>
-      <p>Your schedule is already loaded. Narrow by coach or date, then tick the rows. Each one goes on the board for the others to take. This never changes anything in Arbox.</p>
+      <p>Your schedule is already loaded. Narrow by date, then tick the rows. Each one goes on the board for the others to take. This never changes anything in Arbox.</p>
     </div>
     <div class="row">
-      <label class="fld"><span>Coach</span><select id="f-coach"></select></label>
+      <label class="fld" id="f-coach-wrap"><span>Coach</span><select id="f-coach"></select></label>
       <label class="fld"><span>From</span><input type="date" id="f-from"></label>
       <label class="fld"><span>To</span><input type="date" id="f-to"></label>
     </div>
@@ -1191,6 +1191,7 @@ function adminMessage(rs){
 /* ============================ pick shifts ============================ */
 function renderCoachFilter(){
   var sel=$("f-coach"); var prev=sel.value;
+  $("f-coach-wrap").hidden = !canConfirm();   // a coach picks from their own shifts only
   sel.innerHTML="";
   if(canConfirm()){ var all=el("option",null,"Everyone"); all.value=""; sel.appendChild(all); }
   var seen={};
@@ -1224,14 +1225,15 @@ function renderPreview(){
   var t=$("ptable"); t.innerHTML="";
   var rows=shownShifts();
   var thead=el("thead"), htr=el("tr");
-  ["","Date","Time","Location","Class","Coach"].forEach(function(h){
+  var withCoach=canConfirm();
+  ["","Date","Time","Location","Class"].concat(withCoach?["Coach"]:[]).forEach(function(h){
     var th=el("th",null,h); if(!h) th.className="pick"; htr.appendChild(th);
   });
   thead.appendChild(htr); t.appendChild(thead);
   var tb=el("tbody");
   if(!rows.length){
     var tr0=el("tr"), td0=el("td",null,"Nothing matches those filters.");
-    td0.colSpan=6; td0.style.color="var(--ink-2)"; tr0.appendChild(td0); tb.appendChild(tr0);
+    td0.colSpan=withCoach?6:5; td0.style.color="var(--ink-2)"; tr0.appendChild(td0); tb.appendChild(tr0);
   }
   rows.slice(0,300).forEach(function(s){
     var r=requestFor(s);
@@ -1245,7 +1247,7 @@ function renderPreview(){
     var ti=el("td","mono", s.time||"?"); tr.appendChild(ti);
     tr.appendChild(el("td",null,s.box||"—"));
     tr.appendChild(el("td",null,s.klass||"—"));
-    tr.appendChild(el("td",null,s.coach||"—"));
+    if(withCoach) tr.appendChild(el("td",null,s.coach||"—"));
     if(r) tr.style.opacity=".55";
     tb.appendChild(tr);
   });
