@@ -1249,7 +1249,7 @@ function renderAdmin(){
 function renderLog(){
   var w=$("logout"); w.innerHTML="";
   var F=S.logFilter||null;
-  var rows=S.requests.filter(function(r){
+  var rows=scopedRequests().filter(function(r){
     if(r.status==="cancelled") return false;
     if(F==="pending") return r.status==="claimed"||r.status==="sent";
     if(F==="verified") return r.status==="verified";
