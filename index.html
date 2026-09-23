@@ -387,6 +387,13 @@ hr.sep{border:0; border-top:1px solid var(--line); margin-block:22px}
 .boxrow input{width:17px; height:17px; accent-color:var(--accent); cursor:pointer}
 #whoami a{color:var(--accent)}
 .tab[hidden],.fld[hidden]{display:none}
+/* multi-select: a sticky toolbar with the select-all box, the count and the one action */
+.pick-bar{position:sticky; top:0; z-index:5; display:flex; align-items:center; gap:12px; padding:10px 0;
+  margin-top:12px; background:var(--bg); border-bottom:1px solid var(--line)}
+.pick-bar input[type="checkbox"]{width:18px; height:18px; flex:none}
+.pick-count{flex:1 1 auto; font-size:13px; color:var(--ink-2)}
+#ptable tbody tr{cursor:pointer}
+#ptable tbody tr:hover td{background:var(--surface-2)}
 /* a cover you could take: the box's slot, outlined instead of filled */
 .wk-ev.open,.cal-chip.open{background:var(--ok-bg)!important; color:var(--ok); border:1.5px dashed var(--ok)}
 .wk-row.open i,.cal-dot.open{background:var(--ok-bg)!important; border:1.5px dashed var(--ok); box-sizing:border-box}
@@ -477,12 +484,12 @@ button.stat:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
       <label class="fld"><span>From</span><input type="date" id="f-from"></label>
       <label class="fld"><span>To</span><input type="date" id="f-to"></label>
     </div>
-    <div class="tscroll" style="margin-top:10px"><table id="ptable"></table></div>
-    <div class="row tight" style="margin-top:10px">
-      <button class="btn primary" id="btn-create" type="button">Need cover for these</button>
-      <button class="btn ghost" id="btn-selall" type="button">Select all shown</button>
-      <button class="btn ghost" id="btn-clearsel" type="button">Clear</button>
+    <div class="pick-bar">
+      <input type="checkbox" id="pick-all" aria-label="Select all shown">
+      <span class="pick-count" id="pick-count"></span>
+      <button class="btn primary" id="btn-create" type="button">Need cover</button>
     </div>
+    <div class="tscroll"><table id="ptable"></table></div>
     <p class="foot" id="savednote"></p>
   </section>
 
@@ -1248,6 +1255,7 @@ function renderPreview(){
     var cb=el("input"); cb.type="checkbox"; cb.checked=!!S.sel[s._i]; cb.disabled=!!r;
     if(r) tr.title="Already on the board — "+(STATUS_LABEL[r.status]||r.status);
     cb.addEventListener("change",function(){ S.sel[s._i]=cb.checked; updateCreateBtn(); });
+    tr.addEventListener("click",function(ev){ if(ev.target===cb || cb.disabled) return; cb.checked=!cb.checked; cb.dispatchEvent(new Event("change")); });
     tdp.appendChild(cb); tr.appendChild(tdp);
     var d=el("td","mono", s.date||"?"); tr.appendChild(d);
     var ti=el("td","mono", s.time||"?"); tr.appendChild(ti);
@@ -1265,9 +1273,12 @@ function renderPreview(){
 }
 function updateCreateBtn(){
   var n=0; for(var k in S.sel) if(S.sel[k]) n++;
+  var shown=shownShifts(), avail=shown.filter(function(x){ return !requestFor(x); }).length;
   var b=$("btn-create");
-  b.textContent = S.busy==="bulk" ? "Adding…" : n ? ("Need cover for "+n+" "+(n===1?"shift":"shifts")) : "Need cover for these";
+  b.textContent = S.busy==="bulk" ? "Adding…" : "Need cover"+(n ? " · "+n : "");
   b.disabled = n===0 || S.busy==="bulk";
+  $("pick-count").textContent = n ? n+" selected" : shown.length+" "+(shown.length===1?"shift":"shifts");
+  var all=$("pick-all"); all.checked = avail>0 && n>=avail; all.indeterminate = n>0 && n<avail; all.disabled = avail===0;
 }
 function commitPick(){
   askNotify();
@@ -1779,10 +1790,11 @@ function boot(){
     b.addEventListener("click",function(){ S.userPickedTab=true; setTab(b.dataset.tab); });
   });
   $("btn-create").addEventListener("click",commitPick);
-  $("btn-selall").addEventListener("click",function(){
-    shownShifts().forEach(function(s){ if(!requestFor(s)) S.sel[s._i]=true; }); renderPreview();
+  $("pick-all").addEventListener("change",function(){
+    var on=this.checked; S.sel={};
+    if(on) shownShifts().forEach(function(s){ if(!requestFor(s)) S.sel[s._i]=true; });
+    renderPreview();
   });
-  $("btn-clearsel").addEventListener("click",function(){ S.sel={}; renderPreview(); });
   function shiftWeek(n){
     var ws=new Date((S.weekStart||iso(sundayOf(new Date())))+"T00:00:00");
     ws.setDate(ws.getDate()+n*7); S.weekStart=iso(ws);
