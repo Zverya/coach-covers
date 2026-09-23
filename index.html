@@ -526,7 +526,7 @@ var S = {
   editBoxes:false, boxesSynced:false, boxReqs:[]
 };
 
-S.filter = "open";   // Covers opens on what needs a coach; the chips widen it
+S.filter = "requests";   // Covers opens on what you could take; the chips widen it
 
 var STATUS_LABEL = {
   open:"Needs cover", claimed:"Claimed", sent:"Admin updated",
@@ -892,9 +892,10 @@ function renderMode(){
   p.appendChild(av); p.appendChild(m);
 }
 function counts(){
-  var c={open:0,claimed:0,sent:0,verified:0,mismatch:0,cancelled:0,urgent:0};
+  var c={open:0,claimed:0,sent:0,verified:0,mismatch:0,cancelled:0,urgent:0,takeable:0};
   scopedRequests().forEach(function(r){
     c[r.status]=(c[r.status]||0)+1;
+    if(r.status==="open" && !isMine(r)) c.takeable++;
     if(r.status==="open" && hoursUntil(r)<24 && hoursUntil(r)>-2) c.urgent++;
   });
   return c;
@@ -908,7 +909,8 @@ function renderStats(){
     w.appendChild(d);
   }
   function showChip(f){ S.filter=f; setTab("board"); }
-  tile("c", c.open, c.open===1?"class needs cover":"classes need cover", function(){ showChip("open"); });
+  if(canConfirm()) tile("c", c.open, c.open===1?"class needs cover":"classes need cover", function(){ showChip("requests"); });
+  else tile("c", c.takeable, c.takeable===1?"shift you can take":"shifts you can take", function(){ showChip("requests"); });
   tile("w", c.claimed+c.sent, canConfirm() ? "waiting on you" : "waiting on admin", function(){ showChip("pending"); });
   tile("o", c.verified, "confirmed in system", function(){ showChip("verified"); });
 }
@@ -949,7 +951,8 @@ function renderTopAlert(){
 
 function renderFilters(){
   var f=$("filters"); f.innerHTML="";
-  var opts=[["open","Needs cover"],["pending","Waiting on admin"],["verified","Confirmed"],["mismatch","Not updated"],["all","Everything"]];
+  var opts=[["mine","My shifts"],["requests","Requests"],["pending","Waiting on admin"],["verified","Confirmed"],["mismatch","Not updated"],["all","Everything"]];
+  if(canConfirm()) opts.shift();   // an admin link has no "my" classes
   opts.forEach(function(o){
     var b=el("button","fchip",o[1]);
     b.type="button";
@@ -972,6 +975,8 @@ function visibleRequests(){
   return scopedRequests().filter(function(r){
     if(S.filter==="all") return r.status!=="cancelled";
     if(S.filter==="pending") return r.status==="claimed"||r.status==="sent";
+    if(S.filter==="mine") return r.status==="open" && isMine(r);
+    if(S.filter==="requests") return r.status==="open" && (canConfirm() || !isMine(r));
     return r.status===S.filter;
   }).sort(sortByTime);
 }
@@ -981,9 +986,11 @@ function renderBoard(){
   var list=visibleRequests();
   if(!list.length){
     var e=el("div","empty");
-    e.appendChild(el("b",null, S.filter==="open" ? "Nothing needs a coach right now" : "Nothing in this view"));
-    e.appendChild(el("div",null, S.filter==="open"
-      ? (S.requests.length ? "Every request has been taken. The chips above show the rest." : "Your "+S.schedule.shifts.length+" shifts are loaded. Open Schedule and tap a class, or pick several at once, to ask for cover.")
+    var F=S.filter;
+    e.appendChild(el("b",null, F==="requests" ? "Nothing to take right now" : F==="mine" ? "None of your classes are waiting for cover" : "Nothing in this view"));
+    e.appendChild(el("div",null, F==="requests"
+      ? "When a coach at one of your boxes asks for cover, it shows up here."
+      : F==="mine" ? "Open Schedule and tap a class, or pick several at once, to ask for cover."
       : "Try another chip."));
     w.appendChild(e);
   }
@@ -994,10 +1001,10 @@ function renderBoard(){
     hd.appendChild(el("h3",null,shortBox(box)));
     hd.appendChild(el("span","n", group.length+" "+(group.length===1?"class":"classes")));
     // WhatsApp text for this chip: a call for cover, or a nudge that the swap still needs doing
-    var wa = canConfirm() ? (S.filter==="open") : (S.filter==="open"||S.filter==="pending"||S.filter==="mismatch");
+    var wa = canConfirm() ? (S.filter==="requests") : (S.filter==="mine"||S.filter==="requests"||S.filter==="pending"||S.filter==="mismatch");
     if(wa){
       var cp=el("button","btn","Copy for WhatsApp"); cp.type="button";
-      cp.addEventListener("click",function(){ copyText(S.filter==="open" ? groupMessage(group, box) : adminMessage(group)); });
+      cp.addEventListener("click",function(){ copyText((S.filter==="mine"||S.filter==="requests") ? groupMessage(group, box) : adminMessage(group)); });
       hd.appendChild(cp);
     }
     w.appendChild(hd);
