@@ -301,11 +301,12 @@ hr.sep{border:0; border-top:1px solid var(--line); margin-block:22px}
   letter-spacing:.05em; font-size:13px; margin:0 0 8px; color:var(--ink)}
 /* segmented month/week switch */
 /* calendar header: title over its count on the left; Multi-select over Today + the arrow pair on the right */
-.cal-head{display:grid; grid-template-columns:1fr auto; grid-template-areas:"title multi" "sum nav";
-  align-items:center; gap:3px 12px; margin-bottom:12px}
-.cal-title{grid-area:title; margin:0; min-width:0; align-self:end; line-height:1.1}
+.cal-head{display:grid; grid-template-columns:1fr auto; grid-template-areas:"titles multi" "titles nav";
+  align-items:start; gap:6px 12px; margin-bottom:12px}
+.cal-titles{grid-area:titles; min-width:0}
+.cal-title{margin:0; line-height:1.1}
 .cal-head > #btn-manual{grid-area:multi; justify-self:end}
-.cal-sum{grid-area:sum; width:auto; margin:0; align-self:start; line-height:1.3}
+.cal-sum{width:auto; margin:3px 0 0; line-height:1.3}
 .cal-nav{grid-area:nav; justify-self:end; display:flex; align-items:center; gap:10px}
 .cal-nav .pair{display:inline-flex}
 .cal-nav .pair .btn{padding-inline:12px}
@@ -445,9 +446,11 @@ button.stat:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
   <!-- ============ CALENDAR ============ -->
   <section id="panel-cal" hidden>
     <div class="cal-head">
-      <h2 class="cal-title" id="cal-title">Week</h2>
+      <div class="cal-titles">
+        <h2 class="cal-title" id="cal-title">Week</h2>
+        <p class="cal-sum" id="cal-sum"></p>
+      </div>
       <button class="btn" id="btn-manual" type="button">Multi-select</button>
-      <p class="cal-sum" id="cal-sum"></p>
       <div class="cal-nav">
         <button class="btn" id="cal-today" type="button">Today</button>
         <span class="pair">
