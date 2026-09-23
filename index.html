@@ -331,34 +331,50 @@ function addBoxForm(getName){
 function pickName(app,d){
   var g=el("div","gate");
   g.appendChild(el("h1",null,"Who are you?"));
-  g.appendChild(el("p",null,"Pick your name, then tick the boxes you coach at \u2014 you'll be offered cover shifts at those."));
-  var sel=el("select"); var ph=el("option",null,"Pick your name\u2026"); ph.value=""; sel.appendChild(ph);
-  (d.coaches||[]).forEach(function(c){ var o=el("option",null,c); o.value=c; sel.appendChild(o); });
-  g.appendChild(sel);
-  var boxHost=el("div"); boxHost.hidden=true; g.appendChild(boxHost);
+  g.appendChild(el("p",null,"First tick the boxes you coach at, then pick your name."));
+
+  // 1. boxes (nothing pre-ticked \u2014 the coach chooses)
+  g.appendChild(el("div","boxlabel","Boxes you coach at (pick at least one)"));
+  var bp=boxCheckboxes(d, []);
+  g.appendChild(bp);
+
+  // add a gym that isn't listed
+  var nameSel=null;
+  g.appendChild(addBoxForm(function(){ return nameSel && nameSel.value; }));
+
+  // 2. name \u2014 appears once a box is ticked, listing only that box's coaches
+  var nameWrap=el("div"); nameWrap.hidden=true; nameWrap.style.marginTop="14px"; g.appendChild(nameWrap);
   var go=el("button","btn primary","That's me"); go.style.marginTop="12px"; go.disabled=true;
-  function refresh(){
-    var bp=boxHost.querySelector(".boxpick");
-    var any=bp && bp.querySelectorAll("input:checked").length>0;
-    go.disabled = !(sel.value && any);
+
+  function coachesForSelected(){
+    var sel=checkedBoxes(bp), set={};
+    (d.shifts||[]).forEach(function(x){ if(x.coach && sel.indexOf(x.box)>=0) set[x.coach]=1; });
+    return Object.keys(set).sort(function(a,b){ return a.localeCompare(b); });
   }
-  sel.addEventListener("change",function(){
-    boxHost.innerHTML=""; boxHost.hidden=!sel.value;
-    if(sel.value){
-      boxHost.appendChild(el("div","boxlabel","Boxes you coach at (pick at least one)"));
-      var teaching={}; (d.shifts||[]).forEach(function(x){ if(x.coach===sel.value && x.box) teaching[x.box]=1; });
-      var bp=boxCheckboxes(d, Object.keys(teaching));
-      bp.addEventListener("change", refresh);
-      boxHost.appendChild(bp);
-      boxHost.appendChild(addBoxForm(function(){ return sel.value; }));
-    }
-    refresh();
-  });
+  function refreshNames(){
+    var sel=checkedBoxes(bp);
+    if(!sel.length){ nameWrap.hidden=true; nameWrap.innerHTML=""; nameSel=null; go.disabled=true; return; }
+    // remember any current pick
+    var prev = nameSel ? nameSel.value : "";
+    nameWrap.hidden=false; nameWrap.innerHTML="";
+    nameWrap.appendChild(el("div","boxlabel","Your name"));
+    nameSel=el("select");
+    var ph=el("option",null,"Pick your name\u2026"); ph.value=""; nameSel.appendChild(ph);
+    var names=coachesForSelected();
+    names.forEach(function(c){ var o=el("option",null,c); o.value=c; nameSel.appendChild(o); });
+    if(prev && names.indexOf(prev)>=0) nameSel.value=prev;
+    nameSel.addEventListener("change",function(){ go.disabled=!nameSel.value; });
+    nameWrap.appendChild(nameSel);
+    if(!names.length) nameWrap.appendChild(el("p","foot","No coaches listed for that box yet."));
+    go.disabled = !nameSel.value;
+  }
+  bp.addEventListener("change", refreshNames);
+
   go.addEventListener("click",function(){
-    var wrap=boxHost.querySelector(".boxpick");
-    var chosen = wrap ? checkedBoxes(wrap) : [];
-    if(!chosen.length){ toast("Tick at least one box, or add your gym below"); return; }
-    ME=sel.value; MYBOXES=chosen;
+    var sel=checkedBoxes(bp);
+    if(!sel.length){ toast("Tick at least one box"); return; }
+    if(!nameSel || !nameSel.value){ toast("Pick your name"); return; }
+    ME=nameSel.value; MYBOXES=sel;
     try{ localStorage.setItem("coach-name",ME); }catch(e){}
     S.boxesSynced=true; saveBoxes();
     render();
