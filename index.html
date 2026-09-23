@@ -1407,7 +1407,10 @@ function renderMonth(){
 function renderCalLegend(scope){
   var lg=$("cal-legend"); lg.innerHTML="";
   if(canConfirm()){ var k0=el("div","cal-key"); var sw0=el("i"); sw0.style.background="var(--c0)"; k0.appendChild(sw0); k0.appendChild(el("span",null,"Class · "+scope.length)); lg.appendChild(k0); }
-  (canConfirm() ? [] : boxList()).forEach(function(b){
+  var mineB=myBoxesSeen();
+  (canConfirm() ? [] : boxList()).filter(function(b){   // only the boxes that concern you
+    return mineB.indexOf(b)>=0 || scope.some(function(x){ return (x.box||"").trim()===b; });
+  }).forEach(function(b){
     var n=scope.filter(function(x){ return (canConfirm() ? (x.coach||"") : (x.box||"")).trim()===b; }).length;
     var k=el("div","cal-key");
     var sw=el("i"); sw.style.background=canConfirm() ? coachColor(b) : boxColor(b); k.appendChild(sw);
