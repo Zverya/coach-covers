@@ -857,24 +857,44 @@ function coachesAt(box){
 /* ============================ regular shifts ============================ */
 var DOW=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 function slotKey(sl){ return sl.dow+"|"+sl.time+"|"+sl.box; }
-function slotLabel(sl){ return DOW[sl.dow]+" "+sl.time+" \u00b7 "+(sl.klass||"class")+" \u00b7 "+shortBox(sl.box); }
-/* Slots you taught in at least two of the last three published weeks. */
+function slotLabel(sl){ return DOW[sl.dow]+" "+sl.time+" \u00b7 "+(sl.klass||"class")+" \u00b7 "+shortBox(sl.box)+(sl.every===2?" \u00b7 every other week":""); }
+/* Slots you keep teaching. Looks over every week the board has kept:
+   weekly = in at least two of the last three published weeks;
+   every other week = present in alternating weeks, absent in the weeks between
+   even though that box had published them. */
 function detectRegular(){
   if(!ME) return [];
-  var byWeek={};
+  var byWeek={}, pubWeeks={};
   (S.schedule.shifts||[]).forEach(function(x){
-    if((x.coach||"").trim()!==ME || !inMyBoxes(x.box) || !x.date) return;
+    if(!x.date) return;
     var d=new Date(x.date+"T00:00:00"); if(isNaN(d.getTime())) return;
-    var wk=iso(sundayOf(d));
-    var sl={dow:d.getDay(), time:normTime(x.time), box:(x.box||"").trim(), klass:x.klass||""};
+    var wk=iso(sundayOf(d)), b=(x.box||"").trim();
+    (pubWeeks[b]=pubWeeks[b]||{})[wk]=1;
+    if((x.coach||"").trim()!==ME || !inMyBoxes(b)) return;
+    var sl={dow:d.getDay(), time:normTime(x.time), box:b, klass:x.klass||"", every:1, anchor:x.date};
     (byWeek[wk]=byWeek[wk]||{})[slotKey(sl)]=sl;
   });
-  var weeks=Object.keys(byWeek).sort().slice(-3);
+  var weeks=Object.keys(byWeek).sort();
   if(weeks.length<2) return [];
-  var seen={};
-  weeks.forEach(function(wk){ Object.keys(byWeek[wk]).forEach(function(k){ (seen[k]=seen[k]||{n:0,sl:byWeek[wk][k]}).n++; }); });
-  return Object.keys(seen).filter(function(k){ return seen[k].n>=2; }).map(function(k){ return seen[k].sl; })
-    .sort(function(a,b){ return a.dow-b.dow || a.time.localeCompare(b.time); });
+  var slots={};
+  weeks.forEach(function(wk){ Object.keys(byWeek[wk]).forEach(function(k){ (slots[k]=slots[k]||{sl:byWeek[wk][k], wks:[]}).wks.push(wk); }); });
+  function weeksBetween(a,b){ return Math.round((new Date(b+"T00:00:00")-new Date(a+"T00:00:00"))/604800000); }
+  var out=[];
+  Object.keys(slots).forEach(function(k){
+    var it=slots[k], w=it.wks.sort(), sl=it.sl, pub=pubWeeks[sl.box]||{};
+    sl.anchor=byWeek[w[w.length-1]][k].anchor;
+    // alternating: every gap is two weeks, and the skipped week was published for that box
+    var alt = w.length>=2 && w.slice(1).every(function(x,i){
+      if(weeksBetween(w[i],x)!==2) return false;
+      var mid=new Date(w[i]+"T00:00:00"); mid.setDate(mid.getDate()+7);
+      return !!pub[iso(mid)];
+    });
+    if(alt){ sl.every=2; out.push(sl); return; }
+    var last3=Object.keys(pub).sort().slice(-3);
+    var hits=w.filter(function(x){ return last3.indexOf(x)>=0; }).length;
+    if(hits>=2){ sl.every=1; out.push(sl); }
+  });
+  return out.sort(function(a,b){ return a.dow-b.dow || a.time.localeCompare(b.time); });
 }
 function markRegularAsked(){ try{ localStorage.setItem("coach-regular-asked",ME||""); }catch(e){} }
 function maybeAskRegular(){
@@ -893,6 +913,10 @@ function projectedShifts(){
   for(var w=0; w<9; w++) REGULAR.forEach(function(sl){
     if(!inMyBoxes(sl.box)) return;
     var d=new Date(start.getTime()); d.setDate(d.getDate()+w*7+sl.dow); var ds=iso(d);
+    if(sl.every===2 && sl.anchor){   // every other week: stay in step with the last time it was yours
+      var a=sundayOf(new Date(sl.anchor+"T00:00:00")), wk=sundayOf(d);
+      if(Math.round((wk-a)/604800000)%2!==0) return;
+    }
     if(ds<t0) return;
     if(horizon[sl.box] && ds<=horizon[sl.box]) return;
     out.push({k:"reg|"+ds+"|"+sl.time+"|"+sl.box, date:ds, time:sl.time, box:sl.box, klass:sl.klass, coach:ME, _regular:true});
@@ -909,7 +933,7 @@ function regularEditor(firstTime){
   var det=detectRegular(), have={};
   REGULAR.forEach(function(sl){ have[slotKey(sl)]=1; });
   var all=REGULAR.slice();
-  det.forEach(function(sl){ if(!have[slotKey(sl)]) all.push(sl); });
+  det.forEach(function(sl){ if(!have[slotKey(sl)]) all.push(sl); else { var i=all.findIndex(function(x){ return slotKey(x)===slotKey(sl); }); if(i>=0) all[i]=sl; } });
   all.sort(function(a,b){ return a.dow-b.dow || a.time.localeCompare(b.time); });
   var wrap=el("div","boxpick");
   if(!all.length) wrap.appendChild(el("p","foot","Nothing repeats yet \u2014 once two weeks of your classes are published, they'll show up here."));
