@@ -398,6 +398,9 @@ hr.sep{border:0; border-top:1px solid var(--line); margin-block:22px}
 .wk-ev.open,.cal-chip.open{background:var(--ok-bg)!important; color:var(--ok); border:1.5px dashed var(--ok)}
 .wk-row.open i,.cal-dot.open{background:var(--ok-bg)!important; border:1.5px dashed var(--ok); box-sizing:border-box}
 .wk-row.open .n{color:var(--ok)}
+/* a regular slot Arbox hasn't published yet */
+.wk-ev.regular,.cal-chip.regular{opacity:.45; outline:1.5px dashed var(--surface); outline-offset:-2px}
+.wk-row.regular{opacity:.55}
 /* a class with a request takes the request's status colour, same as the cards */
 .wk-ev.s-open,.cal-chip.s-open{background:var(--crit)!important}
 .wk-ev.s-claimed,.wk-ev.s-sent,.cal-chip.s-claimed,.cal-chip.s-sent{background:var(--warn)!important}
@@ -527,6 +530,7 @@ var CONFIG = { url: "https://cdluysgpwnaddqljyzuz.supabase.co", key: "sb_publish
 var TOKEN = (location.hash.match(/t=([A-Za-z0-9_-]+)/) || [])[1] || "";
 var ME = null;      try { ME = localStorage.getItem("coach-name"); } catch (e) {}
 var MYBOXES = [];   try { MYBOXES = JSON.parse(localStorage.getItem("coach-boxes")||"[]")||[]; } catch (e) { MYBOXES=[]; }
+var REGULAR = [];   try { REGULAR = JSON.parse(localStorage.getItem("coach-regular")||"[]")||[]; } catch (e) { REGULAR=[]; }
 var SAVED_TAB = null;  try { SAVED_TAB = localStorage.getItem("coach-tab"); } catch (e) {}
 
 /* ============================ state ============================ */
@@ -667,7 +671,7 @@ function load(){
   return rpc("board_state",{p_token:TOKEN}).then(function(res){
     S.loading=false;
     if(!res||res.ok===false){ S.err=(res&&res.error)||"unknown"; }
-    else { S.err=null; applyState(res); if(canConfirm()) ME=null; announceNews(); }
+    else { S.err=null; applyState(res); if(canConfirm()) ME=null; announceNews(); maybeAskRegular(); }
     return syncExtras();
   }).then(function(){ renderAll(); })
   .catch(function(){ S.loading=false; S.err="network"; renderAll(); });
@@ -680,6 +684,9 @@ function syncExtras(){
       if(r&&r.ok&&Array.isArray(r.boxes)&&r.boxes.length){
         MYBOXES=r.boxes; try{ localStorage.setItem("coach-boxes",JSON.stringify(MYBOXES)); }catch(e){}
       }
+      if(r&&r.ok&&Array.isArray(r.regular)){   // the server copy wins once the migration is in
+        REGULAR=r.regular; try{ localStorage.setItem("coach-regular",JSON.stringify(REGULAR)); }catch(e){}
+      }
     }).catch(function(){}));
   }
   if(isAdmin()){
@@ -688,6 +695,10 @@ function syncExtras(){
     }).catch(function(){ S.boxReqs=[]; }));
   }
   return Promise.all(jobs);
+}
+function saveRegular(){
+  try{ localStorage.setItem("coach-regular",JSON.stringify(REGULAR)); }catch(e){}
+  if(ME) rpc("set_coach_regular",{p_token:TOKEN,p_coach:ME,p_regular:REGULAR}).catch(function(){});
 }
 function saveBoxes(){
   try{ localStorage.setItem("coach-boxes",JSON.stringify(MYBOXES)); }catch(e){}
@@ -830,6 +841,86 @@ function coachesAt(box){
   return out.sort(function(a,b){ return a.localeCompare(b); });
 }
 
+/* ============================ regular shifts ============================ */
+var DOW=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+function slotKey(sl){ return sl.dow+"|"+sl.time+"|"+sl.box; }
+function slotLabel(sl){ return DOW[sl.dow]+" "+sl.time+" \u00b7 "+(sl.klass||"class")+" \u00b7 "+shortBox(sl.box); }
+/* Slots you taught in at least two of the last three published weeks. */
+function detectRegular(){
+  if(!ME) return [];
+  var byWeek={};
+  (S.schedule.shifts||[]).forEach(function(x){
+    if((x.coach||"").trim()!==ME || !inMyBoxes(x.box) || !x.date) return;
+    var d=new Date(x.date+"T00:00:00"); if(isNaN(d.getTime())) return;
+    var wk=iso(sundayOf(d));
+    var sl={dow:d.getDay(), time:normTime(x.time), box:(x.box||"").trim(), klass:x.klass||""};
+    (byWeek[wk]=byWeek[wk]||{})[slotKey(sl)]=sl;
+  });
+  var weeks=Object.keys(byWeek).sort().slice(-3);
+  if(weeks.length<2) return [];
+  var seen={};
+  weeks.forEach(function(wk){ Object.keys(byWeek[wk]).forEach(function(k){ (seen[k]=seen[k]||{n:0,sl:byWeek[wk][k]}).n++; }); });
+  return Object.keys(seen).filter(function(k){ return seen[k].n>=2; }).map(function(k){ return seen[k].sl; })
+    .sort(function(a,b){ return a.dow-b.dow || a.time.localeCompare(b.time); });
+}
+function markRegularAsked(){ try{ localStorage.setItem("coach-regular-asked",ME||""); }catch(e){} }
+function maybeAskRegular(){
+  if(!ME || canConfirm() || REGULAR.length || S.askRegular) return;
+  var asked=null; try{ asked=localStorage.getItem("coach-regular-asked"); }catch(e){}
+  if(asked===ME) return;
+  if(detectRegular().length) S.askRegular=true;
+}
+/* Your regular slots, pencilled in for the coming nine weeks wherever Arbox
+   hasn't published that box's day yet. A published day is Arbox's call. */
+function projectedShifts(){
+  if(!ME || !REGULAR.length || canConfirm()) return [];
+  var horizon={};
+  (S.schedule.shifts||[]).forEach(function(x){ var b=(x.box||"").trim(); if(x.date && (!horizon[b] || x.date>horizon[b])) horizon[b]=x.date; });
+  var today=new Date(); today.setHours(0,0,0,0); var t0=iso(today), start=sundayOf(today), out=[];
+  for(var w=0; w<9; w++) REGULAR.forEach(function(sl){
+    if(!inMyBoxes(sl.box)) return;
+    var d=new Date(start.getTime()); d.setDate(d.getDate()+w*7+sl.dow); var ds=iso(d);
+    if(ds<t0) return;
+    if(horizon[sl.box] && ds<=horizon[sl.box]) return;
+    out.push({k:"reg|"+ds+"|"+sl.time+"|"+sl.box, date:ds, time:sl.time, box:sl.box, klass:sl.klass, coach:ME, _regular:true});
+  });
+  return out;
+}
+/* Tick the slots that really are yours every week. Doubles as the first-time question. */
+function regularEditor(firstTime){
+  var g=el("div","gate");
+  g.appendChild(el("h1",null, firstTime ? "Your regular shifts?" : "Regular shifts"));
+  g.appendChild(el("p",null, firstTime
+    ? "These classes were yours in the same slot for the past weeks. Tick the ones you teach every week and they'll be pencilled into your calendar two months ahead. Once Arbox publishes a date, Arbox decides."
+    : "Ticked slots are pencilled into your calendar for the weeks Arbox hasn't published yet. Arbox decides once a date is out."));
+  var det=detectRegular(), have={};
+  REGULAR.forEach(function(sl){ have[slotKey(sl)]=1; });
+  var all=REGULAR.slice();
+  det.forEach(function(sl){ if(!have[slotKey(sl)]) all.push(sl); });
+  all.sort(function(a,b){ return a.dow-b.dow || a.time.localeCompare(b.time); });
+  var wrap=el("div","boxpick");
+  if(!all.length) wrap.appendChild(el("p","foot","Nothing repeats yet \u2014 once two weeks of your classes are published, they'll show up here."));
+  all.forEach(function(sl){
+    var lab=el("label","boxrow"); var cb=el("input"); cb.type="checkbox"; cb.value=slotKey(sl);
+    cb.checked = firstTime ? true : !!have[slotKey(sl)];
+    lab.appendChild(cb); lab.appendChild(el("span",null,slotLabel(sl))); wrap.appendChild(lab);
+  });
+  g.appendChild(el("div","boxlabel","Every week"));
+  g.appendChild(wrap);
+  var go=el("button","btn primary", firstTime ? "Yes, these are mine" : "Save"); go.type="button"; go.style.marginTop="12px";
+  go.addEventListener("click",function(){
+    var picked={}; Array.prototype.forEach.call(wrap.querySelectorAll("input:checked"),function(cb){ picked[cb.value]=1; });
+    REGULAR=all.filter(function(sl){ return picked[slotKey(sl)]; });
+    saveRegular(); markRegularAsked();
+    S.askRegular=false; S.editRegular=false; renderAll();
+    toast(REGULAR.length ? REGULAR.length+" regular "+(REGULAR.length===1?"shift":"shifts")+" pencilled in" : "No regular shifts saved");
+  });
+  var back=el("button","btn ghost", firstTime ? "No, skip" : "Cancel"); back.type="button"; back.style.marginTop="12px"; back.style.marginLeft="6px";
+  back.addEventListener("click",function(){ markRegularAsked(); S.askRegular=false; S.editRegular=false; renderAll(); });
+  g.appendChild(go); g.appendChild(back);
+  $("gate").appendChild(g);
+}
+
 /* ============================ roster ============================ */
 function coachNames(){
   var seen={}, out=[];
@@ -858,6 +949,8 @@ function renderAll(){
   else if(!ME && !canConfirm()){ pickName(); }
   else if(S.pickName){ if(MYBOXES.length) pickNameOnly(); else { ME=null; S.pickName=false; pickName(); } }
   else if(S.editBoxes){ boxEditor(); }
+  else if(S.editRegular){ regularEditor(); }
+  else if(S.askRegular && !canConfirm()){ if(detectRegular().length){ regularEditor(true); } else { S.askRegular=false; markRegularAsked(); renderAll(); return; } }
   else { g.hidden=true; m.hidden=false; $("tab-admin").hidden=!canConfirm(); setTab(S.tab); render(); return; }
   g.hidden=false; m.hidden=true;
 }
@@ -896,6 +989,7 @@ function renderMode(){
     b.addEventListener("click",function(){ close(); fn(); }); m.appendChild(b); }
   item("Not you? Pick another name", function(){ S.pickName=true; renderAll(); });
   item("Switch or add a box", function(){ S.editBoxes=true; renderAll(); });
+  item("Regular shifts"+(REGULAR.length?" · "+REGULAR.length:""), function(){ S.editRegular=true; renderAll(); });
   function close(){ m.hidden=true; av.setAttribute("aria-expanded","false"); document.removeEventListener("click",away); }
   function away(ev){ if(!p.contains(ev.target)) close(); }
   av.addEventListener("click",function(ev){
@@ -1441,6 +1535,7 @@ function shiftsOn(ds){
     if(list.some(function(x){ return key(x)===r.k; })) return;
     list.push({k:r.k, date:r.date, time:r.time, box:r.box, klass:r.klass, coach:r.originalCoach, _open:true});
   });
+  projectedShifts().forEach(function(x){ if(x.date===ds) list.push(x); });   // your regular slots beyond what Arbox has published
   if(ME) S.requests.forEach(function(r){   // and the ones you have taken, until Arbox lists them under your name
     if(r.date!==ds || r.claimedBy!==ME || r.status==="open" || r.status==="cancelled" || !inMyBoxes(r.box)) return;
     if(list.some(function(x){ return key(x)===r.k; })) return;
@@ -1449,6 +1544,7 @@ function shiftsOn(ds){
   return list.sort(function(a,b){ return normTime(a.time).localeCompare(normTime(b.time)); });
 }
 function markFor(x, r){
+  if(x._regular) return " regular";
   if(x._open) return " open";
   if(!r) return "";
   if(r.status==="verified" && (x.coach||"").trim()===(r.claimedBy||"").trim()) return "";
@@ -1474,6 +1570,10 @@ function renderCalLegend(scope){
   if(st.claimed||st.sent) stateKey("var(--warn)",canConfirm()?"Cover taken — waiting on you":"Cover taken — waiting on admin");
   if(st.mismatch) stateKey("var(--bad)","Not updated in the system");
   if(st.verified) stateKey("var(--ok)","Confirmed",true);
+  if(projectedShifts().some(function(x){ return scope.some(function(y){ return y.date===x.date; }) || true; }) && REGULAR.length){
+    var kr=el("div","cal-key"); var swr=el("i"); swr.style.background="var(--c0)"; swr.style.opacity=".45";
+    kr.appendChild(swr); kr.appendChild(el("span",null,"Expected — not in Arbox yet")); lg.appendChild(kr);
+  }
   if(openForMe().length){
     var k2=el("div","cal-key"); var sw2=el("i"); sw2.style.background="var(--ok-bg)"; sw2.style.border="1.5px dashed var(--ok)"; sw2.style.boxSizing="border-box";
     k2.appendChild(sw2); k2.appendChild(el("span",null,"Needs cover — you could take it")); lg.appendChild(k2);
@@ -1511,9 +1611,11 @@ function renderWeek(){
   $("cal-title").textContent = pad(ws.getDate())+"–"+pad(we.getDate())+" "
     + (ws.getMonth()===we.getMonth() ? monthNames[we.getMonth()] : monthNames[ws.getMonth()].slice(0,3)+"/"+monthNames[we.getMonth()].slice(0,3))
     + " " + we.getFullYear();
-  $("cal-sum").textContent = inWeek.length
+  var expected=projectedShifts().filter(function(x){ return days.indexOf(x.date)>=0; }).length;
+  $("cal-sum").textContent = (inWeek.length
     ? (inWeek.length+" "+(inWeek.length===1?"class":"classes")+" this week")
-    : "Nothing scheduled this week.";
+    : (expected ? "" : "Nothing scheduled this week."))
+    + (expected ? (inWeek.length?" · ":"")+expected+" expected" : "");
 
   var minH=6, maxH=21;
   if(inWeek.length){
@@ -1555,7 +1657,7 @@ function renderWeek(){
       ev.style.height=(ROW-3)+"px";
       ev.appendChild(el("b",null,normTime(x.time)));
       ev.appendChild(el("span",null,slotName(x)));
-      ev.title=normTime(x.time)+" "+(x.klass||"")+" — "+x.box+(x._open?"  (needs cover — you could take it)":"");
+      ev.title=normTime(x.time)+" "+(x.klass||"")+" — "+x.box+(x._open?"  (needs cover — you could take it)":x._regular?"  (expected — not in Arbox yet)":"");
       ev.addEventListener("click",function(){ S.calDay=ds; S.scrollToDay=true; renderCal(); });
       col.appendChild(ev);
     });
@@ -1612,6 +1714,10 @@ function renderCalDetail(){
     if(x.coach && x.coach!==ME){ body.appendChild(el("span",null," — ")); body.appendChild(el("span","hand", x.coach)); }
     if(r && r.claimedBy){ body.appendChild(el("span","arrow"," → ")); body.appendChild(el("span","hand", r.claimedBy)); }
     card.appendChild(body);
+    if(x._regular){
+      card.appendChild(el("div","req-body","Expected from your regular shifts \u2014 Arbox hasn't published this date yet."));
+      wrap.appendChild(card); return;
+    }
     if(!r && (x.coach===ME || canConfirm())){
       var act=el("div","req-actions");
       var b=el("button","btn", S.busy===key(x) ? "…" : "Need cover for this"); b.type="button"; b.disabled=S.busy===key(x);
@@ -1738,6 +1844,7 @@ function pickName(){
     ME=nameSel.value; MYBOXES=sel;
     try{ localStorage.setItem("coach-name",ME); }catch(e){}
     S.boxesSynced=true; saveBoxes();
+    S.askRegular=true;
     renderAll();
   });
   g.appendChild(go); $("gate").appendChild(g);
