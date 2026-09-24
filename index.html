@@ -751,6 +751,16 @@ function doRaise(sh){
     return load();
   }).catch(fail);
 }
+function doRaiseFuture(x){
+  askNotify();
+  S.busy=key(x); render();
+  rpc("raise_future_cover",{p_token:TOKEN,p_key:x.k,p_coach:WHO(),p_date:x.date,p_time:x.time,p_box:x.box,p_klass:x.klass||""}).then(function(res){
+    S.busy=null; toast(res&&res.ok?"Added to the board":"Already on the board.");
+    return load();
+  }).catch(function(e){ S.busy=null;
+    toast(e&&e.message==="missing_rpc" ? "Cover on expected classes isn't switched on yet — run migrate-future-cover.sql in Supabase." : "Couldn't reach the board.");
+    render(); });
+}
 function raiseMany(shifts){
   if(!shifts.length) return;
   S.busy="bulk"; updateCreateBtn();
@@ -761,7 +771,10 @@ function raiseMany(shifts){
       toast(done ? (done+" added to the board"+(dup?", "+dup+" already there":"")) : "Those are already on the board");
       return load().then(function(){ setTab("board"); });
     }
-    rpc("raise_cover",{p_token:TOKEN,p_key:key(shifts[i]),p_coach:WHO()})
+    var x=shifts[i];
+    (x._regular
+      ? rpc("raise_future_cover",{p_token:TOKEN,p_key:x.k,p_coach:WHO(),p_date:x.date,p_time:x.time,p_box:x.box,p_klass:x.klass||""})
+      : rpc("raise_cover",{p_token:TOKEN,p_key:key(x),p_coach:WHO()}))
       .then(function(res){ if(res&&res.ok) done++; else dup++; next(i+1); })
       .catch(function(){ S.busy=null; toast("Couldn't reach the board — "+done+" added so far."); load(); });
   })(0);
@@ -1311,9 +1324,10 @@ function renderCoachFilter(){
   sel.value = prev || (canConfirm() ? "" : ME);
   if(!sel.value && !canConfirm()) sel.value=ME;
 }
+function pickable(){ return S.schedule.shifts.concat(projectedShifts()).map(function(s,i){ s._i=i; return s; }); }
 function shownShifts(){
   var coach=$("f-coach").value, from=$("f-from").value, to=$("f-to").value;
-  return S.schedule.shifts.map(function(s,i){ s._i=i; return s; }).filter(function(s){
+  return pickable().filter(function(s){
     if(!inScope(s)) return false;
     if(coach && (s.coach||"").trim().toLowerCase()!==coach.trim().toLowerCase()) return false;
     if(from && s.date && s.date<from) return false;
@@ -1355,7 +1369,7 @@ function renderPreview(){
     var d=el("td","mono", s.date||"?"); tr.appendChild(d);
     var ti=el("td","mono", s.time||"?"); tr.appendChild(ti);
     tr.appendChild(el("td",null,s.box||"—"));
-    tr.appendChild(el("td",null,s.klass||"—"));
+    tr.appendChild(el("td",null,(s.klass||"—")+(s._regular?" · expected":"")));
     if(withCoach) tr.appendChild(el("td",null,s.coach||"—"));
     if(r) tr.style.opacity=".55";
     tb.appendChild(tr);
@@ -1377,7 +1391,7 @@ function updateCreateBtn(){
 }
 function commitPick(){
   askNotify();
-  var picked=S.schedule.shifts.filter(function(s,i){ return S.sel[i]; });
+  var picked=pickable().filter(function(s){ return S.sel[s._i]; });
   if(!picked.length){ toast("Tick at least one shift"); return; }
   raiseMany(picked);
 }
@@ -1544,7 +1558,7 @@ function shiftsOn(ds){
   return list.sort(function(a,b){ return normTime(a.time).localeCompare(normTime(b.time)); });
 }
 function markFor(x, r){
-  if(x._regular) return " regular";
+  if(x._regular && !r) return " regular";
   if(x._open) return " open";
   if(!r) return "";
   if(r.status==="verified" && (x.coach||"").trim()===(r.claimedBy||"").trim()) return "";
@@ -1714,14 +1728,11 @@ function renderCalDetail(){
     if(x.coach && x.coach!==ME){ body.appendChild(el("span",null," — ")); body.appendChild(el("span","hand", x.coach)); }
     if(r && r.claimedBy){ body.appendChild(el("span","arrow"," → ")); body.appendChild(el("span","hand", r.claimedBy)); }
     card.appendChild(body);
-    if(x._regular){
-      card.appendChild(el("div","req-body","Expected from your regular shifts \u2014 Arbox hasn't published this date yet."));
-      wrap.appendChild(card); return;
-    }
+    if(x._regular) card.appendChild(el("div","req-body","Expected from your regular shifts \u2014 Arbox hasn't published this date yet."));
     if(!r && (x.coach===ME || canConfirm())){
       var act=el("div","req-actions");
       var b=el("button","btn", S.busy===key(x) ? "…" : "Need cover for this"); b.type="button"; b.disabled=S.busy===key(x);
-      b.addEventListener("click",function(){ doRaise(x); });
+      b.addEventListener("click",function(){ if(x._regular) doRaiseFuture(x); else doRaise(x); });
       act.appendChild(b); card.appendChild(act);
     }
     wrap.appendChild(card);
