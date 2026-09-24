@@ -7,6 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>Coach Cover Board</title>
+<link rel="icon" href="data:,">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -1381,7 +1382,7 @@ function groupMessage(rs, box){
   });
   lines.push("");
   lines.push("לוקחים דרך הלוח, לא רק \"אני יכול/ה\" — נספר רק אחרי שזה על הלוח והמנהל/ת עדכן/ה בארבוקס:");
-  lines.push(location.href);
+  lines.push(location.origin+location.pathname+location.hash);   // the board link, without any cache-busting query
   return lines.join("\n");
 }
 function adminMessage(rs){
