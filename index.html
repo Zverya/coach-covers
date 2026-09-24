@@ -1352,30 +1352,52 @@ function reqCard(r){
 }
 function renderBoardTools(){ $("boardtools").innerHTML=""; }
 
-/* ---------- message builders ---------- */
-function groupMessage(rs, box){
-  var list=[].concat(rs).sort(sortByTime);
-  var lines=[];
-  lines.push((list.length===1 ? "Cover needed" : "Cover needed for "+list.length+" classes")+(box ? " at "+shortBox(box) : "")+":");
-  lines.push("");
+/* ---------- message builders (Hebrew, for the WhatsApp groups) ---------- */
+var HE_DAYS=["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
+function heDate(ds){
+  var d=new Date(ds+"T00:00:00");
+  if(isNaN(d.getTime())) return ds;
+  return "יום "+HE_DAYS[d.getDay()]+" "+pad(d.getDate())+"/"+pad(d.getMonth()+1);
+}
+/* One heading per date, then the classes under it. */
+function byDate(rs){
+  var list=[].concat(rs).sort(sortByTime), out=[], cur=null;
   list.forEach(function(r){
-    lines.push("• "+when(r)+" — "+(r.klass||"class")+(box ? "" : " @ "+r.box)+" (was "+(r.originalCoach||"unassigned")+")");
+    if(!cur || cur.date!==r.date){ cur={date:r.date, items:[]}; out.push(cur); }
+    cur.items.push(r);
+  });
+  return out;
+}
+function groupMessage(rs, box){
+  var list=[].concat(rs);
+  var lines=[];
+  lines.push((list.length===1 ? "מחפשים כיסוי לשיעור" : "מחפשים כיסוי ל-"+list.length+" שיעורים")+(box ? " ב"+shortBox(box) : "")+":");
+  byDate(list).forEach(function(g){
+    lines.push("");
+    lines.push(heDate(g.date));
+    g.items.forEach(function(r){
+      lines.push("• "+normTime(r.time)+" "+(r.klass||"שיעור")+(box ? "" : " @ "+shortBox(r.box))+" ("+(r.originalCoach||"ללא מאמן")+")");
+    });
   });
   lines.push("");
-  lines.push("Take it on the board — "+location.href.split("#")[0]+" — not just \"I can\". It only counts once it's on the board and the admin has changed it in the system.");
+  lines.push("לוקחים דרך הלוח, לא רק \"אני יכול/ה\" — נספר רק אחרי שזה על הלוח והמנהל/ת עדכן/ה בארבוקס:");
+  lines.push(location.href);
   return lines.join("\n");
 }
 function adminMessage(rs){
-  var list=[].concat(rs).sort(sortByTime);
-  var lines=["Please update the coach on these classes:",""];
-  list.forEach(function(r){
-    lines.push("• "+when(r)+" — "+(r.klass||"class")+" @ "+r.box);
-    lines.push("    "+(r.originalCoach||"unassigned")+"  ->  "+(r.claimedBy||"TBC"));
+  var lines=["נא לעדכן מאמן/ת בשיעורים הבאים בארבוקס:"];
+  byDate(rs).forEach(function(g){
+    lines.push("");
+    lines.push(heDate(g.date)+" — "+shortBox(g.items[0].box));
+    g.items.forEach(function(r){
+      lines.push("• "+normTime(r.time)+" "+(r.klass||"שיעור")+": "+(r.claimedBy||"טרם נקבע")+" במקום "+(r.originalCoach||"ללא מאמן"));
+    });
   });
   lines.push("");
-  lines.push("These are agreed and confirmed with both coaches. Flagging because the hours need to land on the coach who actually taught.");
+  lines.push("מסוכם ומאושר עם שני המאמנים. חשוב שהשעות יירשמו על מי שהעביר/ה בפועל.");
   return lines.join("\n");
 }
+
 
 /* ============================ pick shifts ============================ */
 function renderCoachFilter(){
