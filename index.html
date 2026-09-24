@@ -906,10 +906,11 @@ function renderMode(){
   p.appendChild(av); p.appendChild(m);
 }
 function counts(){
-  var c={open:0,claimed:0,sent:0,verified:0,mismatch:0,cancelled:0,urgent:0,takeable:0};
+  var c={open:0,claimed:0,sent:0,verified:0,mismatch:0,cancelled:0,urgent:0,takeable:0,mineOpen:0};
   scopedRequests().forEach(function(r){
     c[r.status]=(c[r.status]||0)+1;
     if(r.status==="open" && !isMine(r)) c.takeable++;
+    if(r.status==="open" && isMine(r)) c.mineOpen++;
     if(r.status==="open" && hoursUntil(r)<24 && hoursUntil(r)>-2) c.urgent++;
   });
   return c;
@@ -924,7 +925,7 @@ function renderStats(){
   }
   function showChip(f){ S.filter=f; setTab("board"); }
   if(canConfirm()) tile("c", c.open, c.open===1?"class needs cover":"classes need cover", function(){ showChip("requests"); });
-  else tile("c", c.takeable, c.takeable===1?"shift you can take":"shifts you can take", function(){ showChip("requests"); });
+  else tile("c", c.mineOpen, c.mineOpen===1?"class you need covered":"classes you need covered", function(){ showChip("mine"); });
   tile("w", c.claimed+c.sent, canConfirm() ? "waiting on you" : "waiting on admin", function(){ showChip("pending"); });
   tile("o", c.verified, "confirmed in system", function(){ showChip("verified"); });
 }
