@@ -672,7 +672,7 @@ function load(){
   return rpc("board_state",{p_token:TOKEN}).then(function(res){
     S.loading=false;
     if(!res||res.ok===false){ S.err=(res&&res.error)||"unknown"; }
-    else { S.err=null; applyState(res); if(canConfirm()) ME=null; announceNews(); maybeAskRegular(); }
+    else { S.err=null; applyState(res); if(canConfirm()) ME=null; announceNews(); }
     return syncExtras();
   }).then(function(){ renderAll(); })
   .catch(function(){ S.loading=false; S.err="network"; renderAll(); });
@@ -908,17 +908,12 @@ function detectRegular(){
   return out.sort(function(a,b){ return a.dow-b.dow || a.time.localeCompare(b.time); });
 }
 function markRegularAsked(){ try{ localStorage.setItem("coach-regular-asked",ME||""); }catch(e){} }
-function regularAnswered(){ var asked=null; try{ asked=localStorage.getItem("coach-regular-asked"); }catch(e){} return asked===ME || REGULAR.length>0; }
-/* The first time: a full-screen question. After that, new repeating slots show as a banner. */
-function maybeAskRegular(){
-  if(!ME || canConfirm() || S.askRegular || regularAnswered()) return;
-  if(detectRegular().length) S.askRegular=true;
-}
-/* Repeating slots you have never said yes or no to. */
+/* Repeating slots you have never said yes or no to — assumed regular until you do. */
 function newRegular(){
   var have={}; REGULAR.forEach(function(x){ have[slotKey(x)]=1; });
   return detectRegular().filter(function(sl){ return !have[slotKey(sl)]; });
 }
+function effectiveRegular(){ return REGULAR.concat(newRegular()); }
 function setRegular(list, onKeys){   // every listed slot is remembered: ticked = on, unticked = off
   REGULAR=list.map(function(sl){ var o={}; for(var k in sl) o[k]=sl[k]; o.off=!onKeys[slotKey(sl)]; return o; });
   saveRegular(); markRegularAsked();
@@ -926,11 +921,12 @@ function setRegular(list, onKeys){   // every listed slot is remembered: ticked 
 /* Your regular slots, pencilled in for the coming nine weeks wherever Arbox
    hasn't published that box's day yet. A published day is Arbox's call. */
 function projectedShifts(){
-  if(!ME || !REGULAR.length || canConfirm()) return [];
+  if(!ME || canConfirm()) return [];
   var horizon={};
   (S.schedule.shifts||[]).forEach(function(x){ var b=(x.box||"").trim(); if(x.date && (!horizon[b] || x.date>horizon[b])) horizon[b]=x.date; });
   var today=new Date(); today.setHours(0,0,0,0); var t0=iso(today), start=sundayOf(today), out=[];
-  for(var w=0; w<9; w++) REGULAR.forEach(function(sl){
+  var reg=effectiveRegular();
+  for(var w=0; w<9; w++) reg.forEach(function(sl){
     if(sl.off || !inMyBoxes(sl.box)) return;
     var d=new Date(start.getTime()); d.setDate(d.getDate()+w*7+sl.dow); var ds=iso(d);
     if(sl.every===2 && sl.anchor){   // every other week: stay in step with the last time it was yours
@@ -945,12 +941,11 @@ function projectedShifts(){
 }
 /* Tick the slots that really are yours. Doubles as the first-time question.
    Everything listed is remembered: ticked = pencilled in, unticked = declined. */
-function regularEditor(firstTime){
+function regularEditor(){
+  var firstTime=false;
   var g=el("div","gate");
-  g.appendChild(el("h1",null, firstTime ? "Your regular shifts?" : "Regular shifts"));
-  g.appendChild(el("p",null, firstTime
-    ? "These classes were yours in the same slot for the past weeks. Tick the ones you teach every week and they'll be pencilled into your calendar two months ahead. Once Arbox publishes a date, Arbox decides."
-    : "Ticked slots are pencilled into your calendar for the weeks Arbox hasn't published yet. Arbox decides once a date is out. Unticked ones are remembered as not regular."));
+  g.appendChild(el("h1",null,"Regular shifts"));
+  g.appendChild(el("p",null,"Slots that keep repeating in your schedule are pencilled into the weeks Arbox hasn't published yet. Untick anything that isn't really yours every week; add what the schedule doesn't show. Arbox decides once a date is out."));
   if(!S.regDraft){
     var have={}, all=REGULAR.map(function(x){ have[slotKey(x)]=1; return x; });
     detectRegular().forEach(function(sl){ if(!have[slotKey(sl)]) all.push(sl); else { var i=all.findIndex(function(x){ return slotKey(x)===slotKey(sl); }); if(i>=0 && all[i].every!==sl.every){ sl.off=all[i].off; all[i]=sl; } } });
@@ -987,25 +982,22 @@ function regularEditor(firstTime){
     if(!tm.value){ toast("Pick a time"); return; }
     var sl={dow:+day.value, time:normTime(tm.value), box:bx.value, klass:kl.value.trim(), every:+ev.value, anchor: ev.value==="2" ? (nx.value||nextOf(+day.value)) : nextOf(+day.value), off:false};
     if(S.regDraft.some(function(x){ return slotKey(x)===slotKey(sl); })){ toast("That slot is already listed"); return; }
-    S.regDraft.push(sl); $("gate").innerHTML=""; regularEditor(firstTime);
+    S.regDraft.push(sl); $("gate").innerHTML=""; regularEditor();
     toast("Added \u2014 tick it and save");
   });
   f.appendChild(addb);
   g.appendChild(f);
 
-  var go=el("button","btn primary", firstTime ? "Yes, these are mine" : "Save"); go.type="button"; go.style.marginTop="16px";
+  var go=el("button","btn primary","Save"); go.type="button"; go.style.marginTop="16px";
   go.addEventListener("click",function(){
     var on={}; Array.prototype.forEach.call(wrap.querySelectorAll("input:checked"),function(cb){ on[cb.value]=1; });
     setRegular(S.regDraft, on); S.regDraft=null;
-    S.askRegular=false; S.editRegular=false; renderAll();
+    S.editRegular=false; renderAll();
     var n=REGULAR.filter(function(x){ return !x.off; }).length;
     toast(n ? n+" regular "+(n===1?"shift":"shifts")+" pencilled in" : "No regular shifts pencilled in");
   });
-  var back=el("button","btn ghost", firstTime ? "No, skip" : "Cancel"); back.type="button"; back.style.marginTop="16px"; back.style.marginLeft="6px";
-  back.addEventListener("click",function(){
-    if(firstTime) setRegular(S.regDraft, {});   // remembered as declined, so they are not asked about again
-    S.regDraft=null; markRegularAsked(); S.askRegular=false; S.editRegular=false; renderAll();
-  });
+  var back=el("button","btn ghost","Cancel"); back.type="button"; back.style.marginTop="16px"; back.style.marginLeft="6px";
+  back.addEventListener("click",function(){ S.regDraft=null; S.editRegular=false; renderAll(); });
   g.appendChild(go); g.appendChild(back);
   $("gate").appendChild(g);
 }
@@ -1039,7 +1031,6 @@ function renderAll(){
   else if(S.pickName){ if(MYBOXES.length) pickNameOnly(); else { ME=null; S.pickName=false; pickName(); } }
   else if(S.editBoxes){ boxEditor(); }
   else if(S.editRegular){ regularEditor(); }
-  else if(S.askRegular && !canConfirm()){ if(detectRegular().length){ if(!S.regDraft) S.regDraft=null; regularEditor(true); } else { S.askRegular=false; markRegularAsked(); renderAll(); return; } }
   else { g.hidden=true; m.hidden=false; $("tab-admin").hidden=!canConfirm(); setTab(S.tab); render(); return; }
   g.hidden=false; m.hidden=true;
 }
@@ -1078,7 +1069,7 @@ function renderMode(){
     b.addEventListener("click",function(){ close(); fn(); }); m.appendChild(b); }
   item("Not you? Pick another name", function(){ S.pickName=true; renderAll(); });
   item("Switch or add a box", function(){ S.editBoxes=true; renderAll(); });
-  var nReg=REGULAR.filter(function(x){ return !x.off; }).length;
+  var nReg=effectiveRegular().filter(function(x){ return !x.off; }).length;
   item("Regular shifts"+(nReg?" · "+nReg:""), function(){ S.editRegular=true; renderAll(); });
   function close(){ m.hidden=true; av.setAttribute("aria-expanded","false"); document.removeEventListener("click",away); }
   function away(ev){ if(!p.contains(ev.target)) close(); }
@@ -1115,24 +1106,6 @@ function renderStats(){
 }
 function renderTopAlert(){
   var c=counts(), z=$("topalert"); z.innerHTML="";
-  if(ME && !canConfirm() && regularAnswered()){
-    var fresh=newRegular();
-    if(fresh.length){
-      var nb=el("div","alert note");
-      nb.appendChild(el("span","ic","\u21bb"));
-      var body=el("span");
-      body.appendChild(el("strong",null, fresh.length===1 ? "New regular shift? " : fresh.length+" new repeating slots. "));
-      body.appendChild(document.createTextNode(fresh.map(slotLabel).join(" \u00b7 ")+" \u2014 "+(fresh.length===1?"it has":"they have")+" been yours for a few weeks running."));
-      nb.appendChild(body);
-      var act=el("span"); act.style.display="flex"; act.style.gap="6px"; act.style.flex="none"; act.style.marginLeft="auto";
-      var add=el("button","btn primary","Add"); add.type="button";
-      add.addEventListener("click",function(){ var on={}; REGULAR.forEach(function(x){ if(!x.off) on[slotKey(x)]=1; }); fresh.forEach(function(x){ on[slotKey(x)]=1; }); setRegular(REGULAR.concat(fresh), on); render(); toast("Pencilled in"); });
-      var no=el("button","btn ghost","Not regular"); no.type="button";
-      no.addEventListener("click",function(){ var on={}; REGULAR.forEach(function(x){ if(!x.off) on[slotKey(x)]=1; }); setRegular(REGULAR.concat(fresh), on); render(); });
-      act.appendChild(add); act.appendChild(no); nb.appendChild(act);
-      z.appendChild(nb);
-    }
-  }
   var news=takenNews();
   if(news.length){
     var n=el("div","alert ok");
@@ -1828,7 +1801,13 @@ function renderCalDetail(){
       var act=el("div","req-actions");
       var b=el("button","btn", S.busy===key(x) ? "…" : "Need cover for this"); b.type="button"; b.disabled=S.busy===key(x);
       b.addEventListener("click",function(){ if(x._regular) doRaiseFuture(x); else doRaise(x); });
-      act.appendChild(b); card.appendChild(act);
+      act.appendChild(b);
+      if(x._regular){
+        var adj=el("button","btn ghost","Not yours every week? Adjust"); adj.type="button";
+        adj.addEventListener("click",function(){ S.editRegular=true; renderAll(); window.scrollTo(0,0); });
+        act.appendChild(adj);
+      }
+      card.appendChild(act);
     }
     wrap.appendChild(card);
   });
@@ -1950,7 +1929,6 @@ function pickName(){
     ME=nameSel.value; MYBOXES=sel;
     try{ localStorage.setItem("coach-name",ME); }catch(e){}
     S.boxesSynced=true; saveBoxes();
-    S.askRegular=true;
     renderAll();
   });
   g.appendChild(go); $("gate").appendChild(g);
