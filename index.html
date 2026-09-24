@@ -688,6 +688,10 @@ function syncExtras(){
         REGULAR=r.regular; try{ localStorage.setItem("coach-regular",JSON.stringify(REGULAR)); }catch(e){}
       }
     }).catch(function(){}));
+    // past classes, for spotting the weekly pattern further back than the calendar shows
+    jobs.push(rpc("coach_history",{p_token:TOKEN,p_coach:ME}).then(function(r){
+      if(r&&r.ok){ S.history=r.shifts||[]; S.historyDays=r.days||[]; }
+    }).catch(function(){ S.history=S.history||[]; S.historyDays=S.historyDays||[]; }));
   }
   if(isAdmin()){
     jobs.push(rpc("pending_boxes",{p_token:TOKEN}).then(function(r){
@@ -865,8 +869,14 @@ function slotLabel(sl){ return DOW[sl.dow]+" "+sl.time+" \u00b7 "+(sl.klass||"cl
 function detectRegular(){
   if(!ME) return [];
   var byWeek={}, pubWeeks={};
-  (S.schedule.shifts||[]).forEach(function(x){
+  (S.historyDays||[]).forEach(function(x){   // days each box published, back to ~90 days
+    var d=new Date(x.date+"T00:00:00"); if(isNaN(d.getTime())) return;
+    (pubWeeks[(x.box||"").trim()]=pubWeeks[(x.box||"").trim()]||{})[iso(sundayOf(d))]=1;
+  });
+  var seenKey={};
+  (S.schedule.shifts||[]).concat((S.history||[]).map(function(h){ return {k:h.key, date:h.date, time:h.time, box:h.box, klass:h.klass, coach:h.coach}; })).forEach(function(x){
     if(!x.date) return;
+    if(x.k){ if(seenKey[x.k]) return; seenKey[x.k]=1; }
     var d=new Date(x.date+"T00:00:00"); if(isNaN(d.getTime())) return;
     var wk=iso(sundayOf(d)), b=(x.box||"").trim();
     (pubWeeks[b]=pubWeeks[b]||{})[wk]=1;
