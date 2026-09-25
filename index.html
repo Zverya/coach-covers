@@ -533,16 +533,15 @@ var TOKEN = (location.hash.match(/t=([A-Za-z0-9_-]+)/) || [])[1] || "";
 var ME = null;      try { ME = localStorage.getItem("coach-name"); } catch (e) {}
 var MYBOXES = [];   try { MYBOXES = JSON.parse(localStorage.getItem("coach-boxes")||"[]")||[]; } catch (e) { MYBOXES=[]; }
 var REGULAR = [];   try { REGULAR = JSON.parse(localStorage.getItem("coach-regular")||"[]")||[]; } catch (e) { REGULAR=[]; }
-var SAVED_TAB = null;  try { SAVED_TAB = localStorage.getItem("coach-tab"); } catch (e) {}
 
 /* ============================ state ============================ */
 var S = {
   loading:true, err:null, data:null, busy:null,
   schedule:{shifts:[], importedAt:null},
   requests:[],
-  tab:SAVED_TAB||"cal", sel:{},
+  tab:"cal", sel:{},
   calY:null, calM:null, calDay:null, calView:"week", weekStart:null,
-  userPickedTab:!!SAVED_TAB, autoTabDone:false,
+  userPickedTab:false, autoTabDone:false,
   editBoxes:false, boxesSynced:false, boxReqs:[]
 };
 
@@ -1837,16 +1836,6 @@ function renderCalDetail(){
   w.appendChild(wrap);
 }
 
-/* Land on the covers list when there is something waiting on someone. */
-function maybeAutoTab(){
-  if(S.autoTabDone || S.userPickedTab) return;
-  if(!(S.schedule.shifts||[]).length) return;
-  S.autoTabDone=true;
-  var active=S.requests.filter(function(r){
-    return r.status!=="cancelled" && r.status!=="verified";
-  }).length;
-  if(active) setTab("board");
-}
 
 /* ============================ tabs ============================ */
 function setTab(name){
@@ -1856,7 +1845,6 @@ function setTab(name){
     var pan=$("panel-"+t); if(pan) pan.hidden=(t!==name);
     var btn=$("tab-"+t);   if(btn) btn.setAttribute("aria-selected", t===name ? "true":"false");
   });
-  if(name!=="pick" && name!=="log"){ try{ localStorage.setItem("coach-tab",name); }catch(e){} }
   if(name==="board") renderBoard();
   if(name==="cal") renderCal();
   if(name==="pick") renderPick();
@@ -2029,7 +2017,7 @@ function boot(){
   });
 
   renderAll();
-  load().then(function(){ maybeAutoTab(); });
+  load();
   setInterval(function(){
     if(document.hidden || S.busy || !(ME||canConfirm()) || S.editBoxes) return;
     if(S.requests.some(function(r){ return r._claiming||r._confirmRemove; })) return;
