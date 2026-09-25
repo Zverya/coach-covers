@@ -530,6 +530,7 @@ button.stat:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
 /* ============================ config ============================ */
 var CONFIG = { url: "https://cdluysgpwnaddqljyzuz.supabase.co", key: "sb_publishable_EnC_Za8GzrsiDzInxDNvGg_kLr_V0V0" };
 var TOKEN = (location.hash.match(/t=([A-Za-z0-9_-]+)/) || [])[1] || "";
+var GO = (location.hash.match(/go=([a-z]+)/) || [])[1] || "";   // a link from a WhatsApp message can open straight onto Requests
 var ME = null;      try { ME = localStorage.getItem("coach-name"); } catch (e) {}
 var MYBOXES = [];   try { MYBOXES = JSON.parse(localStorage.getItem("coach-boxes")||"[]")||[]; } catch (e) { MYBOXES=[]; }
 var REGULAR = [];   try { REGULAR = JSON.parse(localStorage.getItem("coach-regular")||"[]")||[]; } catch (e) { REGULAR=[]; }
@@ -1031,7 +1032,10 @@ function renderAll(){
   else if(S.pickName){ if(MYBOXES.length) pickNameOnly(); else { ME=null; S.pickName=false; pickName(); } }
   else if(S.editBoxes){ boxEditor(); }
   else if(S.editRegular){ regularEditor(); }
-  else { g.hidden=true; m.hidden=false; $("tab-admin").hidden=!canConfirm(); setTab(S.tab); render(); return; }
+  else {
+    if(GO==="requests" && !S.goDone){ S.goDone=true; S.tab="board"; S.filter="requests"; }
+    g.hidden=true; m.hidden=false; $("tab-admin").hidden=!canConfirm(); setTab(S.tab); render(); return;
+  }
   g.hidden=false; m.hidden=true;
 }
 function render(){
@@ -1381,7 +1385,7 @@ function groupMessage(rs, box){
   });
   lines.push("");
   lines.push("לוקחים דרך הלוח, לא רק \"אני יכול/ה\" — נספר רק אחרי שזה על הלוח והמנהל/ת עדכן/ה בארבוקס:");
-  lines.push(location.origin+location.pathname+location.hash);   // the board link, without any cache-busting query
+  lines.push(location.origin+location.pathname+"#t="+TOKEN+"&go=requests");   // opens the board on Requests
   return lines.join("\n");
 }
 function adminMessage(rs){
