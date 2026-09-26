@@ -667,12 +667,19 @@ function rpc(fn,args){
 /* Reshape board_state into what the board's own render code expects. */
 function applyState(res){
   S.data=res;
+  var seen={}, dropped={};
   S.schedule.shifts=(res.shifts||[]).map(function(s){
     return {k:s.key, date:s.date, time:normTime(s.time), box:s.box, klass:s.klass, coach:s.coach};
+  }).sort(function(a,b){   // a real Arbox id beats a synthetic key for the same class
+    var sa=/^syn-/.test(a.k)?1:0, sb=/^syn-/.test(b.k)?1:0; return sa-sb;
+  }).filter(function(x){   // one row per class: same date, time, box, coach and class name
+    var id=x.date+"|"+x.time+"|"+(x.box||"").trim()+"|"+(x.coach||"").trim()+"|"+(x.klass||"").trim().toLowerCase();
+    if(seen[id]){ dropped[x.k]=seen[id]; return false; }
+    seen[id]=x.k; return true;
   });
   var prev={}; S.requests.forEach(function(r){ prev[r.id]=r; });
   S.requests=(res.requests||[]).map(function(r){
-    var o={ id:r.id, k:r.key, date:r.date, time:normTime(r.time), box:r.box, klass:r.klass,
+    var o={ id:r.id, k:dropped[r.key]||r.key,   // a request on a dropped duplicate follows the class that stayed date:r.date, time:normTime(r.time), box:r.box, klass:r.klass,
             originalCoach:r.originalCoach, status:mapStatus(r.status), claimedBy:r.claimedBy||null,
             createdBy:r.createdBy||null, checkedCoach:r.checkedCoach||null };
     var p=prev[r.id]; if(p) for(var f in p) if(f.charAt(0)==="_") o[f]=p[f];   // keep half-typed forms alive across refreshes
