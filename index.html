@@ -389,6 +389,17 @@ hr.sep{border:0; border-top:1px solid var(--line); margin-block:22px}
 #whoami a{color:var(--accent)}
 .tab[hidden],.fld[hidden]{display:none}
 /* multi-select: a sticky toolbar with the select-all box, the count and the one action */
+/* first-time walkthrough: a ring around the thing being explained, a card at the bottom */
+.tour-ring{position:fixed; border:2px solid var(--accent); border-radius:12px; z-index:61; pointer-events:none;
+  box-shadow:0 0 0 9999px rgba(23,26,36,.55); transition:top .25s, left .25s, width .25s, height .25s}
+.tour-card{position:fixed; left:12px; right:12px; bottom:calc(14px + env(safe-area-inset-bottom,0)); max-width:460px;
+  margin:0 auto; background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:14px 16px 12px;
+  z-index:62; box-shadow:0 12px 32px rgba(0,0,0,.28)}
+.tour-card h3{font-family:Oswald,sans-serif; font-weight:600; text-transform:uppercase; letter-spacing:.04em;
+  font-size:15px; margin:0 0 4px; color:var(--ink)}
+.tour-card p{margin:0 0 12px; font-size:13.5px; color:var(--ink-2); line-height:1.5}
+.tour-nav{display:flex; gap:8px; align-items:center}
+.tour-nav .n{font-size:11px; color:var(--ink-3); margin-right:auto; letter-spacing:.05em; text-transform:uppercase}
 .pick-bar{position:sticky; top:0; z-index:5; display:flex; align-items:center; gap:12px; padding:10px 0;
   margin-top:12px; background:var(--bg); border-bottom:1px solid var(--line)}
 .pick-bar input[type="checkbox"]{width:18px; height:18px; flex:none}
@@ -1003,6 +1014,75 @@ function regularEditor(){
   $("gate").appendChild(g);
 }
 
+/* ============================ first-time walkthrough ============================ */
+function tourKey(){ return canConfirm() ? "admin:"+(adminBox()||"all") : (ME||""); }
+function tourDone(){ var v=null; try{ v=localStorage.getItem("coach-tour-done"); }catch(e){} return v===tourKey(); }
+function tourSteps(){
+  if(canConfirm()) return [
+    {h:(isAdmin()?"Every box":shortBox(adminBox()||"Your box"))+" on one board", p:"Every class and every cover request at the box, and whether Arbox was really updated. Half a minute."},
+    {t:"#wk-wrap", tab:"cal", h:"The box's week", p:"Every coached class. Red still needs a coach; amber has been taken but you haven't moved it in Arbox yet; struck through is confirmed."},
+    {t:"#tab-admin", h:"To update", p:"The swaps waiting on you. Move each one in Arbox, then mark it done — the nightly check confirms it against the published schedule."},
+    {t:"#tab-board", h:"Covers", p:"Open requests by chip. If a swap was arranged off the board, record who took it with \u201cSomeone took it\u201d."},
+    {t:".stats", h:"The numbers", p:"Tap a tile to jump straight to its list."}
+  ];
+  return [
+    {h:"Your cover board", p:"Your classes, the shifts you can pick up, and whether Arbox was really updated \u2014 in one place. Half a minute to show you around."},
+    {t:"#wk-wrap", tab:"cal", h:"Your week", p:"Every class of yours at the boxes you ticked. Tap a class to ask for cover; tap a day to open it in full."},
+    {t:"#cal-legend", tab:"cal", h:"The colours", p:"Red: still needs cover. Amber: someone took it, the admin hasn't moved it in Arbox yet. Dashed green: a shift you could take. Faded: expected from your regular pattern, not published yet."},
+    {t:"#btn-manual", tab:"cal", h:"Several at once", p:"Multi-select lists your shifts by date. Tick what you need covered and ask once."},
+    {t:"#tab-board", h:"Covers", p:"Requests are shifts at your boxes you can take. My shifts is what you've asked for. Copy for WhatsApp writes the group message for you."},
+    {t:".stats", h:"The numbers", p:"Tap a tile to jump straight to its list."},
+    {t:".avatar", h:"You", p:"Change your name or boxes, and adjust the regular shifts the board pencils in for you."}
+  ];
+}
+function startTour(){
+  endTour();
+  var steps=tourSteps(); S.tourAt=0;
+  var ring=el("div","tour-ring"), card=el("div","tour-card");
+  ring.id="tour-ring"; card.id="tour-card";
+  document.body.appendChild(ring); document.body.appendChild(card);
+  function place(){
+    var st=steps[S.tourAt], tgt=st.t ? document.querySelector(st.t) : null;
+    if(tgt && tgt.offsetParent!==null){
+      var r=tgt.getBoundingClientRect();
+      ring.style.top=(r.top-6)+"px"; ring.style.left=(r.left-6)+"px";
+      ring.style.width=(r.width+12)+"px"; ring.style.height=(r.height+12)+"px";
+    } else {   // nothing to point at: dim everything
+      ring.style.top="50%"; ring.style.left="50%"; ring.style.width="0"; ring.style.height="0";
+    }
+  }
+  function show(){
+    var st=steps[S.tourAt];
+    if(st.tab && S.tab!==st.tab) setTab(st.tab);
+    var tgt=st.t ? document.querySelector(st.t) : null;
+    if(tgt) tgt.scrollIntoView({block:"center", behavior:"instant"});
+    card.innerHTML="";
+    card.appendChild(el("h3",null,st.h)); card.appendChild(el("p",null,st.p));
+    var nav=el("div","tour-nav");
+    nav.appendChild(el("span","n",(S.tourAt+1)+" / "+steps.length));
+    if(S.tourAt<steps.length-1){
+      var skip=el("button","btn ghost","Skip"); skip.type="button"; skip.addEventListener("click",endTour); nav.appendChild(skip);
+    }
+    if(S.tourAt>0){ var back=el("button","btn","Back"); back.type="button"; back.addEventListener("click",function(){ S.tourAt--; show(); }); nav.appendChild(back); }
+    var next=el("button","btn primary", S.tourAt<steps.length-1 ? "Next" : "Done"); next.type="button";
+    next.addEventListener("click",function(){ if(S.tourAt<steps.length-1){ S.tourAt++; show(); } else endTour(); });
+    nav.appendChild(next); card.appendChild(nav);
+    setTimeout(place, 60);
+  }
+  S._tourPlace=place;
+  window.addEventListener("resize",place); window.addEventListener("scroll",place,true);
+  document.addEventListener("keydown",tourKeys);
+  show();
+}
+function tourKeys(ev){ if(ev.key==="Escape") endTour(); }
+function endTour(){
+  var r=$("tour-ring"), c=$("tour-card");
+  if(r) r.remove(); if(c) c.remove();
+  if(S._tourPlace){ window.removeEventListener("resize",S._tourPlace); window.removeEventListener("scroll",S._tourPlace,true); S._tourPlace=null; }
+  document.removeEventListener("keydown",tourKeys);
+  try{ localStorage.setItem("coach-tour-done",tourKey()); }catch(e){}
+}
+
 /* ============================ roster ============================ */
 function coachNames(){
   var seen={}, out=[];
@@ -1034,7 +1114,9 @@ function renderAll(){
   else if(S.editRegular){ regularEditor(); }
   else {
     if(GO==="requests" && !S.goDone){ S.goDone=true; S.tab="board"; S.filter="requests"; }
-    g.hidden=true; m.hidden=false; $("tab-admin").hidden=!canConfirm(); setTab(S.tab); render(); return;
+    g.hidden=true; m.hidden=false; $("tab-admin").hidden=!canConfirm(); setTab(S.tab); render();
+    if(!S.tourOffered && !tourDone()){ S.tourOffered=true; setTimeout(startTour, 400); }
+    return;
   }
   g.hidden=false; m.hidden=true;
 }
@@ -1075,6 +1157,7 @@ function renderMode(){
   item("Switch or add a box", function(){ S.editBoxes=true; renderAll(); });
   var nReg=effectiveRegular().filter(function(x){ return !x.off; }).length;
   item("Regular shifts"+(nReg?" · "+nReg:""), function(){ S.editRegular=true; renderAll(); });
+  item("Show me around", function(){ setTab("cal"); startTour(); });
   function close(){ m.hidden=true; av.setAttribute("aria-expanded","false"); document.removeEventListener("click",away); }
   function away(ev){ if(!p.contains(ev.target)) close(); }
   av.addEventListener("click",function(ev){
