@@ -679,7 +679,8 @@ function applyState(res){
   });
   var prev={}; S.requests.forEach(function(r){ prev[r.id]=r; });
   S.requests=(res.requests||[]).map(function(r){
-    var o={ id:r.id, k:dropped[r.key]||r.key,   // a request on a dropped duplicate follows the class that stayed date:r.date, time:normTime(r.time), box:r.box, klass:r.klass,
+    // a request on a dropped duplicate follows the class that stayed
+    var o={ id:r.id, k:dropped[r.key]||r.key, date:r.date, time:normTime(r.time), box:r.box, klass:r.klass,
             originalCoach:r.originalCoach, status:mapStatus(r.status), claimedBy:r.claimedBy||null,
             createdBy:r.createdBy||null, checkedCoach:r.checkedCoach||null };
     var p=prev[r.id]; if(p) for(var f in p) if(f.charAt(0)==="_") o[f]=p[f];   // keep half-typed forms alive across refreshes
