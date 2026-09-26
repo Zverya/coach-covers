@@ -11,3 +11,10 @@ update requests r
    and s.box = r.box and coalesce(s.coach,'') = coalesce(r.original_coach,'')
    and not exists (select 1 from requests q where q.board_id = r.board_id and q.shift_key = s.shift_key);
 delete from shifts where shift_key like 'syn-%';
+
+-- Requests that pointed at a stale row for a day Arbox hasn't published yet:
+-- give them the "expected class" key, so the nightly push adopts the real
+-- class the moment it appears.
+update requests
+   set shift_key = 'reg|' || shift_date || '|' || left(shift_time,5) || '|' || box
+ where shift_key like 'syn-%';
